@@ -22,6 +22,7 @@
 #CONFIG_TPM_CRB=n
 #CONFIG_TPM_TIS=n
 #CONFIG_VTD=n
+CONFIG_FW_CFG_DMA=y
 
 # Boards:
 #
