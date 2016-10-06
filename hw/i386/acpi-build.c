@@ -2028,6 +2028,9 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
     }
 
     build_acpi_byt_adsp_devices(dsdt);
+    build_acpi_hsw_adsp_devices(dsdt);
+    build_acpi_dwdma_device(dsdt);
+
     if (misc->tpm_version != TPM_VERSION_UNSPEC) {
         aml_append(crs, aml_memory32_fixed(TPM_TIS_ADDR_BASE,
                    TPM_TIS_ADDR_SIZE, AML_READ_WRITE));
