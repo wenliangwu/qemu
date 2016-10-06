@@ -2027,7 +2027,8 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
         }
     }
 
-    if (TPM_IS_TIS(tpm_find())) {
+    build_acpi_byt_adsp_devices(dsdt);
+    if (misc->tpm_version != TPM_VERSION_UNSPEC) {
         aml_append(crs, aml_memory32_fixed(TPM_TIS_ADDR_BASE,
                    TPM_TIS_ADDR_SIZE, AML_READ_WRITE));
     }
