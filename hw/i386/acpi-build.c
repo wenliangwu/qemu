@@ -65,6 +65,8 @@
 #include "qom/qom-qobject.h"
 #include "hw/i386/amd_iommu.h"
 #include "hw/i386/intel_iommu.h"
+#include "hw/adsp/hw.h"
+#include "hw/audio/adsp-host.h"
 
 #include "hw/acpi/ipmi.h"
 
