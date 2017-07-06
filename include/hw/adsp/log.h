@@ -119,6 +119,8 @@ extern const struct adsp_reg_desc adsp_byt_shim_map[BYT_SHIM_REGS];
 extern const struct adsp_reg_desc adsp_hsw_shim_map[HSW_SHIM_REGS];
 #define BXT_SHIM_REGS   25
 extern const struct adsp_reg_desc adsp_bxt_shim_map[BXT_SHIM_REGS];
+#define SUE_SHIM_REGS   25
+extern const struct adsp_reg_desc adsp_sue_shim_map[SUE_SHIM_REGS];
 
 
 #if LOG_SHIM
