@@ -1,7 +1,7 @@
 if [ $# -lt 1 ]
 then
   echo "usage: $0 device [-k kernel] [-t] [-d] [-i] [-r rom] [-c] [-g]"
-  echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl""
+  echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl"
   echo "[-k] | [--kernel]: load firmware kernel image"
   echo "[-r] | [--rom]: load firmware ROM image"
   echo "[-t] | [--trace]: trace DSP instructions"
@@ -35,7 +35,7 @@ case $1 in
  ADSP="adsp_bxt"
   ;;
 *sue)
- CPU="sue"
+ CPU="suecreek"
  ADSP="adsp_sue"
  ;;
 *cnl)
