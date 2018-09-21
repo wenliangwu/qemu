@@ -224,7 +224,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
 
     for (n = 0; n < smp_cpus; n++) {
         adsp->xtensa[n] = g_malloc(sizeof(struct adsp_xtensa));
-        adsp->xtensa[n]->cpu = cpu_xtensa_init(adsp->cpu_model);
+        adsp->xtensa[n]->cpu = XTENSA_CPU(cpu_create(adsp->cpu_model));
 
         if (adsp->xtensa[n]->cpu == NULL) {
             error_report("unable to find CPU definition '%s'",
@@ -278,8 +278,11 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     load_image_size(adsp->kernel_filename, man,
         board->iram.size);
 
-    // HACK for ext manifest
-    //man = (void*)man + 0x708; // HACK for ext manifest
+    /* HACK for ext manifest  ID = "$AE1" */
+    if (*((uint32_t*)man) == 0x31454124) {
+        man = (void*)man + 0x900; // HACK for ext manifest
+        printf("skipping extended manifest \n");
+    }
 
     hdr = &man->desc.header;
 
@@ -339,6 +342,8 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
                 continue;
             }
 
+            printf(" Unmatched segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
         }
     }
 
@@ -422,10 +427,11 @@ static void sue_adsp_init(MachineState *machine)
 
 static void xtensa_sue_machine_init(MachineClass *mc)
 {
-    mc->desc = "Broxton HiFi3";
+    mc->desc = "Sue HiFi3";
     mc->is_default = true;
     mc->init = sue_adsp_init;
     mc->max_cpus = 2;
+    mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
 DEFINE_MACHINE("adsp_sue", xtensa_sue_machine_init)
