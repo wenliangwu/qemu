@@ -223,8 +223,9 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     }
 
     for (n = 0; n < smp_cpus; n++) {
+
         adsp->xtensa[n] = g_malloc(sizeof(struct adsp_xtensa));
-        adsp->xtensa[n]->cpu = XTENSA_CPU(cpu_create(adsp->cpu_model));
+        adsp->xtensa[n]->cpu = XTENSA_CPU(cpu_create(machine->cpu_type));
 
         if (adsp->xtensa[n]->cpu == NULL) {
             error_report("unable to find CPU definition '%s'",
