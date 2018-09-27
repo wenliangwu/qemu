@@ -1,6 +1,6 @@
 if [ $# -lt 1 ]
 then
-  echo "usage: $0 device [-k kernel] [-t] [-d] [-i] [-r rom] [-c] [-g]"
+  echo "usage: $0 device [-k kernel] [-t] [-d] [-i] [-r rom] [-c] [-g] [-o time log]"
   echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl"
   echo "[-k] | [--kernel]: load firmware kernel image"
   echo "[-r] | [--rom]: load firmware ROM image"
@@ -9,6 +9,7 @@ then
   echo "[-d] | [--debug]: enable GDB debugging - uses tcp::1234"
   echo "[-c] | [--console]: Stall DSP and enter console before executing"
   echo "[-g] | [--guest]: Display guest errors"
+  echo "[-o] | [--timeout]: Kill after timeout seconds"
   exit
 fi
 
@@ -87,6 +88,13 @@ case $key in
     CARGS="-S"
     shift # past argument
     ;;
+     -o|--timeout)
+    TIMEOUT="$3"
+    LOG="$4"
+    shift # past argument
+    shift # past value
+    shift # past value
+    ;;
     *)    # unknown option
     ARG+=("$1") # save it in an array for later
     shift # past argument
@@ -133,5 +141,9 @@ rm -fr /dev/mqueue/qemu-io-*
 #
 
 echo ./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS
-./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS
+if [ -z ${TIMEOUT} ]; then
+	./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS;
+else
+	timeout --foreground $TIMEOUT ./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS > $LOG;
+fi
 
