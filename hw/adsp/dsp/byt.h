@@ -40,6 +40,7 @@
 #define IRQ_NUM_EXT_SSP0     16
 #define IRQ_NUM_EXT_SSP1     17
 #define IRQ_NUM_EXT_SSP2     18
+#define IRQ_NUM_EXT_DMAC2    19
 #define IRQ_NUM_NMI          20
 
 struct adsp_dev;
