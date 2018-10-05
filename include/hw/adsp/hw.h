@@ -74,6 +74,7 @@ struct adsp_desc {
 	struct adsp_mem_desc iram;
 	struct adsp_mem_desc dram0;
         struct adsp_mem_desc lp_sram;
+	struct adsp_mem_desc uncache;
 	struct adsp_mem_desc rom;
 	struct adsp_mem_desc pci;
 	uint32_t host_iram_offset;

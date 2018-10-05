@@ -249,6 +249,24 @@ struct adsp_meta_file_ext {
 } __attribute__((packed));
 
 struct fw_image_manifest {
+#if 1
+	/* MEU tool needs these sections to be 0s */
+	struct CsePartitionDirHeader cse_partition_dir_header;
+	struct CsePartitionDirEntry cse_partition_dir_entry[MAN_CSE_PARTS];
+	struct css_header css;
+	struct signed_pkg_info_ext signed_pkg;
+	struct partition_info_ext partition_info;
+	uint8_t cse_padding[MAN_CSE_PADDING_SIZE];//0xff
+
+	/* MEU tool also needs this 0s, but uses this extension for input from sepatate file */
+	struct adsp_meta_file_ext adsp_file_ext;
+
+	/* reserved / pading at end of ext data - all 0s*/
+	uint8_t reserved[MAN_EXT_PADDING];
+
+	/* start of the unsigned binary for MEU input must start at MAN_DESC_OFFSET*/
+	uint8_t padding[MAN_DESC_PADDING_SIZE];
+#endif
 	struct adsp_fw_desc desc; // at offset 0x284
 } __attribute__((packed));
 

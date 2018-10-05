@@ -123,6 +123,10 @@
 #define ADSP_BXT_DSP_ROM_BASE     0xBEFE0000
 #define ADSP_BXT_DSP_ROM_SIZE         0x0002000
 
+/* Uncache */
+#define ADSP_BXT_DSP_UNCACHE_BASE     0xB0000000
+#define ADSP_BXT_DSP_UNCACHE_SIZE         0x0080000
+
 /* mailbox */
 #define ADSP_BXT_DSP_MAILBOX_SIZE      0x4000
 
