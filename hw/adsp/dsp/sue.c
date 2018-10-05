@@ -259,11 +259,10 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
 
     /* load binary file if one is specified on cmd line otherwise finish */
     if (adsp->kernel_filename == NULL) {
-        printf(" ** Broxton Xtensa HiFi3 DSP initialised.\n"
+        printf(" ** Sue Creek Xtensa HiFi3 DSP initialised.\n"
             " ** Waiting for host to load firmware...\n");
         return adsp;
     }
-
 
     printf("now loading:\n kernel %s\n ROM %s\n",
         adsp->kernel_filename, adsp->rom_filename);
@@ -278,7 +277,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     man = g_malloc(board->iram.size);
     load_image_size(adsp->kernel_filename, man,
         board->iram.size);
-
+printf("hack %x\n", *((uint32_t*)man));
     /* HACK for ext manifest  ID = "$AE1" */
     if (*((uint32_t*)man) == 0x31454124) {
         man = (void*)man + 0x900; // HACK for ext manifest
@@ -286,7 +285,9 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     }
 
     hdr = &man->desc.header;
-
+printf("man %p hdr %p\n", man, hdr);  
+printf("hdr %x\n", hdr->header_len);
+printf("hdr %c%c%c%c\n", hdr->header_id[0], hdr->header_id[1], hdr->header_id[2], hdr->header_id[3]);
     /* copy module to SRAM */
    for (i = 0; i < hdr->num_module_entries; i++) {
 

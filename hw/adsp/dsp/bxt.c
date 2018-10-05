@@ -76,7 +76,7 @@ static const MemoryRegionOps io_ops = {
 
 static void init_memory(struct adsp_dev *adsp, const char *name)
 {
-    MemoryRegion *iram, *dram0, *lp_sram, *rom, *io;
+    MemoryRegion *iram, *dram0, *lp_sram, *rom, *io, *uncache;
     const struct adsp_desc *board = adsp->desc;
     void *ptr = NULL;
     char shm_name[32];
@@ -129,10 +129,27 @@ static void init_memory(struct adsp_dev *adsp, const char *name)
     memory_region_add_subregion(adsp->system_memory,
         board->lp_sram.base, lp_sram);
 
-   /* set memory to non zero values */
+    /* set memory to non zero values */
     uptr = ptr;
     for (i = 0; i < board->lp_sram.size >> 2; i++)
         uptr[i] = 0x7c7c7c7c;
+
+    /* Uncache - shared via SHM (not shared on real HW) */
+    sprintf(shm_name, "%s-uncache", name);
+    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_UNCACHE,
+        board->uncache.size, &ptr);
+    if (err < 0)
+        fprintf(stderr, "error: cant alloc UNCACHE SHM %d\n", err);
+    uncache = g_malloc(sizeof(*uncache));
+    memory_region_init_ram_ptr(uncache, NULL, "lpe.uncache", board->uncache.size, ptr);
+    vmstate_register_ram_global(uncache);
+    memory_region_add_subregion(adsp->system_memory,
+        board->uncache.base, uncache);
+
+   /* set memory to non zero values */
+    uptr = ptr;
+    for (i = 0; i < board->uncache.size >> 2; i++)
+        uptr[i] = 0x8d8d8d8d;
 
     /* ROM - shared via SHM (not shared on real HW) */
     sprintf(shm_name, "%s-rom", name);
@@ -293,7 +310,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
    for (i = 0; i < hdr->num_module_entries; i++) {
 
 	mod = &man->desc.module[i];
-        printf("checking module %d\n", i);
+        printf("checking module %d got %d entries\n", i, hdr->num_module_entries);
 
         for (j = 0; j < 3; j++) {
 
@@ -345,6 +362,22 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
                 continue;
             }
 
+	    /* Uncache */
+            if (mod->segment[j].v_base_addr >= ADSP_BXT_DSP_UNCACHE_BASE &&
+                mod->segment[j].v_base_addr < ADSP_BXT_DSP_UNCACHE_BASE +
+			 ADSP_BXT_DSP_UNCACHE_SIZE) {
+	    	soffset = mod->segment[j].v_base_addr - ADSP_BXT_DSP_UNCACHE_BASE;
+ 
+                printf(" Uncache segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                cpu_physical_memory_write(board->uncache.base + soffset,
+                    (void*)man + foffset, ssize);
+                continue;
+            }
+
+
             printf(" Unmatched segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
         }
@@ -364,6 +397,7 @@ static const struct adsp_desc bxt_dsp_desc = {
     .iram = {.base = ADSP_BXT_DSP_SRAM_BASE, .size = ADSP_BXT_DSP_SRAM_SIZE},
     .dram0 = {.base = ADSP_BXT_DSP_HP_SRAM_BASE, .size = ADSP_BXT_DSP_HP_SRAM_SIZE},
     .lp_sram = {.base = ADSP_BXT_DSP_LP_SRAM_BASE, .size = ADSP_BXT_DSP_LP_SRAM_SIZE},
+    .uncache = {.base = ADSP_BXT_DSP_UNCACHE_BASE, .size = ADSP_BXT_DSP_UNCACHE_SIZE},
     .rom = {.base = ADSP_BXT_DSP_ROM_BASE, .size = ADSP_BXT_DSP_ROM_SIZE},
 
     .mbox_dev = {
