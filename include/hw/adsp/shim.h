@@ -147,8 +147,9 @@
 #define ADSP_IO_SHM_ROM		5
 #define ADSP_IO_SHM_IO		6
 #define ADSP_IO_SHM_UNCACHE	7
-#define ADSP_IO_SHM_DMAC(dmac)			(8 + dmac)
-#define ADSP_IO_SHM_DMA(c, chan)		((c + 1) * 8 + chan)
+#define ADSP_IO_SHM_IMR 8
+#define ADSP_IO_SHM_DMAC(dmac)			(16 + dmac)
+#define ADSP_IO_SHM_DMA(c, chan)		((c + 1) * 16 + chan)
 
 /* messages */
 #define PMC_DDR_LINK_UP		0xc0	/* LPE req path to DRAM is up */

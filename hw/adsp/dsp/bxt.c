@@ -76,7 +76,7 @@ static const MemoryRegionOps io_ops = {
 
 static void init_memory(struct adsp_dev *adsp, const char *name)
 {
-    MemoryRegion *iram, *dram0, *lp_sram, *rom, *io, *uncache;
+    MemoryRegion *iram, *dram0, *lp_sram, *rom, *io, *uncache, *imr;
     const struct adsp_desc *board = adsp->desc;
     void *ptr = NULL;
     char shm_name[32];
@@ -94,6 +94,7 @@ static void init_memory(struct adsp_dev *adsp, const char *name)
     vmstate_register_ram_global(iram);
     memory_region_add_subregion(adsp->system_memory,
         board->iram.base, iram);
+    adsp->sram = ptr;
 
     /* set memory to non zero values */
     uptr = ptr;
@@ -111,6 +112,16 @@ static void init_memory(struct adsp_dev *adsp, const char *name)
     vmstate_register_ram_global(dram0);
     memory_region_add_subregion(adsp->system_memory,
         board->dram0.base, dram0);
+    adsp->hp_sram = ptr;
+
+   /* Uncache HP-SRAM (same HP-SRAM, just mapped at different addr)  */
+    sprintf(shm_name, "%s-uncache", name);
+    uncache = g_malloc(sizeof(*uncache));
+    memory_region_init_ram_ptr(uncache, NULL, "lpe.uncache", board->uncache.size, ptr);
+    vmstate_register_ram_global(uncache);
+    memory_region_add_subregion(adsp->system_memory,
+        board->uncache.base, uncache);
+    adsp->uncache = ptr;
 
     /* set memory to non zero values */
     uptr = ptr;
@@ -128,28 +139,30 @@ static void init_memory(struct adsp_dev *adsp, const char *name)
     vmstate_register_ram_global(lp_sram);
     memory_region_add_subregion(adsp->system_memory,
         board->lp_sram.base, lp_sram);
+    adsp->lp_sram = ptr;
 
     /* set memory to non zero values */
     uptr = ptr;
     for (i = 0; i < board->lp_sram.size >> 2; i++)
         uptr[i] = 0x7c7c7c7c;
 
-    /* Uncache - shared via SHM (not shared on real HW) */
-    sprintf(shm_name, "%s-uncache", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_UNCACHE,
-        board->uncache.size, &ptr);
+    /* IMR - shared via SHM (not shared on real HW) */
+    sprintf(shm_name, "%s-imr", name);
+    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_IMR,
+        board->imr.size, &ptr);
     if (err < 0)
-        fprintf(stderr, "error: cant alloc UNCACHE SHM %d\n", err);
-    uncache = g_malloc(sizeof(*uncache));
-    memory_region_init_ram_ptr(uncache, NULL, "lpe.uncache", board->uncache.size, ptr);
-    vmstate_register_ram_global(uncache);
+        fprintf(stderr, "error: cant alloc IMR SHM %d\n", err);
+    imr = g_malloc(sizeof(*imr));
+    memory_region_init_ram_ptr(imr, NULL, "lpe.imr", board->imr.size, ptr);
+    vmstate_register_ram_global(imr);
     memory_region_add_subregion(adsp->system_memory,
-        board->uncache.base, uncache);
+        board->imr.base, imr);
+    adsp->imr = ptr;
 
    /* set memory to non zero values */
     uptr = ptr;
-    for (i = 0; i < board->uncache.size >> 2; i++)
-        uptr[i] = 0x8d8d8d8d;
+    for (i = 0; i < board->imr.size >> 2; i++)
+        uptr[i] = 0x9e9e9e9e;
 
     /* ROM - shared via SHM (not shared on real HW) */
     sprintf(shm_name, "%s-rom", name);
@@ -162,6 +175,7 @@ static void init_memory(struct adsp_dev *adsp, const char *name)
     vmstate_register_ram_global(rom);
     memory_region_add_subregion(adsp->system_memory,
         board->rom.base, rom);
+    adsp->rom = ptr;
 
    /* set memory to non zero values */
     uptr = ptr;
@@ -266,7 +280,6 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
 
     /* init peripherals */
     adsp_bxt_shim_init(adsp, name);
-    adsp_mbox_init(adsp, name);
     dw_dma_init_dev(adsp, adsp->system_memory, board->gp_dmac_dev, 2);
     adsp_ssp_init(adsp->system_memory, board->ssp_dev, 2);
 
@@ -283,7 +296,6 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
         return adsp;
     }
 
-
     printf("now loading:\n kernel %s\n ROM %s\n",
         adsp->kernel_filename, adsp->rom_filename);
 
@@ -291,7 +303,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     rom = g_malloc(ADSP_BXT_DSP_ROM_SIZE);
     load_image_size(adsp->rom_filename, rom,
         ADSP_BXT_DSP_ROM_SIZE);
-    cpu_physical_memory_write(board->rom.base, rom, ADSP_BXT_DSP_ROM_SIZE);
+    memcpy(adsp->rom, rom, ADSP_BXT_DSP_ROM_SIZE);
 
     /* load the binary image and copy to SRAM */
     man = g_malloc(board->iram.size);
@@ -325,11 +337,11 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
                 mod->segment[j].v_base_addr < ADSP_BXT_DSP_SRAM_BASE + ADSP_BXT_DSP_SRAM_SIZE) {
 	    	soffset = mod->segment[j].v_base_addr - ADSP_BXT_DSP_SRAM_BASE;
  
-                printf(" L2 segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                printf(" L2 segment %d file offset 0x%lx L2$ addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
 
                 /* copy text to SRAM */
-                cpu_physical_memory_write(board->iram.base + soffset,
+                memcpy(adsp->sram + soffset,
                     (void*)man + foffset, ssize);
                 continue;
             }
@@ -339,11 +351,11 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
                 mod->segment[j].v_base_addr < ADSP_BXT_DSP_HP_SRAM_BASE + ADSP_BXT_DSP_HP_SRAM_SIZE) {
 	    	soffset = mod->segment[j].v_base_addr - ADSP_BXT_DSP_HP_SRAM_BASE;
  
-                printf(" HP segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                printf(" HP segment %d file offset 0x%lx HP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
 
                 /* copy text to SRAM */
-                cpu_physical_memory_write(board->dram0.base + soffset,
+                memcpy(adsp->hp_sram + soffset,
                     (void*)man + foffset, ssize);
                 continue;
             }
@@ -353,30 +365,44 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
                 mod->segment[j].v_base_addr < ADSP_BXT_DSP_LP_SRAM_BASE + ADSP_BXT_DSP_LP_SRAM_SIZE) {
 	    	soffset = mod->segment[j].v_base_addr - ADSP_BXT_DSP_LP_SRAM_BASE;
  
-                printf(" LP segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                printf(" LP segment %d file offset 0x%lx LP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
 
                 /* copy text to SRAM */
-                cpu_physical_memory_write(board->lp_sram.base + soffset,
+                memcpy(adsp->lp_sram + soffset,
                     (void*)man + foffset, ssize);
                 continue;
             }
 
-	    /* Uncache */
+	        /* Uncache */
             if (mod->segment[j].v_base_addr >= ADSP_BXT_DSP_UNCACHE_BASE &&
                 mod->segment[j].v_base_addr < ADSP_BXT_DSP_UNCACHE_BASE +
 			 ADSP_BXT_DSP_UNCACHE_SIZE) {
 	    	soffset = mod->segment[j].v_base_addr - ADSP_BXT_DSP_UNCACHE_BASE;
  
-                printf(" Uncache segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                printf(" Uncache segment %d file offset 0x%lx Uncache addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
 
                 /* copy text to SRAM */
-                cpu_physical_memory_write(board->uncache.base + soffset,
+                memcpy(adsp->uncache + soffset,
                     (void*)man + foffset, ssize);
                 continue;
             }
 
+             /* IMR */
+            if (mod->segment[j].v_base_addr >= ADSP_BXT_DSP_IMR_BASE &&
+                mod->segment[j].v_base_addr < ADSP_BXT_DSP_IMR_BASE +
+             ADSP_BXT_DSP_IMR_SIZE) {
+            soffset = mod->segment[j].v_base_addr - ADSP_BXT_DSP_IMR_BASE;
+
+                printf(" IMR segment %d file offset 0x%lx IMR addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                memcpy(adsp->imr + soffset,
+                    (void*)man + foffset, ssize);
+                continue;
+            }
 
             printf(" Unmatched segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
@@ -398,6 +424,7 @@ static const struct adsp_desc bxt_dsp_desc = {
     .dram0 = {.base = ADSP_BXT_DSP_HP_SRAM_BASE, .size = ADSP_BXT_DSP_HP_SRAM_SIZE},
     .lp_sram = {.base = ADSP_BXT_DSP_LP_SRAM_BASE, .size = ADSP_BXT_DSP_LP_SRAM_SIZE},
     .uncache = {.base = ADSP_BXT_DSP_UNCACHE_BASE, .size = ADSP_BXT_DSP_UNCACHE_SIZE},
+    .imr = {.base = ADSP_BXT_DSP_IMR_BASE, .size = ADSP_BXT_DSP_IMR_SIZE},
     .rom = {.base = ADSP_BXT_DSP_ROM_BASE, .size = ADSP_BXT_DSP_ROM_SIZE},
 
     .mbox_dev = {
