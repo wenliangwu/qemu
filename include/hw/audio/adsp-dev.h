@@ -33,6 +33,14 @@ struct adsp_dev {
 	uint32_t *shim_io;
 	uint32_t *common_io;
 
+	/* memories */
+	void *sram;
+	void *rom;
+	void *uncache;
+	void *imr;
+	void *lp_sram;
+	void *hp_sram;
+
 	/* runtime CPU */
 	struct adsp_xtensa *xtensa[ADSP_MAX_CORES];
 	bool cpu_stalled;
