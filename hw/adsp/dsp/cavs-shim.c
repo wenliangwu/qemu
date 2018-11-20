@@ -32,7 +32,7 @@
 #include "hw/audio/adsp-dev.h"
 #include "hw/adsp/shim.h"
 #include "hw/adsp/log.h"
-#include "cnl.h"
+#include "cavs.h"
 #include "common.h"
 
 static void rearm_ext_timer(struct adsp_dev *adsp)
@@ -48,7 +48,7 @@ static void rearm_ext_timer(struct adsp_dev *adsp)
                 1000000, adsp->ext_clk_kHz));
 }
 
-void cnl_ext_timer_cb(void *opaque)
+void cavs_ext_timer_cb(void *opaque)
 {
     struct adsp_dev *adsp = opaque;
     uint32_t pisr = adsp->shim_io[SHIM_PISR >> 2];
@@ -286,7 +286,7 @@ static void do_shim64(struct adsp_dev *adsp, struct qemu_io_msg *msg)
     }
 }
 
-void adsp_cnl_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
+void adsp_cavs_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
     switch (msg->msg) {
     case QEMU_IO_MSG_REG32W:
@@ -305,7 +305,7 @@ void adsp_cnl_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
     }
 }
 
-void adsp_cnl_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
+void adsp_cavs_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
     uint32_t active;
 
@@ -318,7 +318,9 @@ void adsp_cnl_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
         adsp->shim_io[SHIM_IPCX >> 2]);
 
     if (active) {
+        qemu_mutex_lock_iothread();
         adsp_set_irq(adsp, adsp->desc->ia_irq, 1);
+        qemu_mutex_unlock_iothread();
     }
 }
 
@@ -328,7 +330,7 @@ static const MemoryRegionOps shim_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-void adsp_cnl_shim_init(struct adsp_dev *adsp, const char *name)
+void adsp_cavs_shim_init(struct adsp_dev *adsp, const char *name)
 {
     MemoryRegion *shim;
     const struct adsp_desc *board = adsp->desc;

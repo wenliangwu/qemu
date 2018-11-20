@@ -18,8 +18,8 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __ADSP_cnl_H__
-#define __ADSP_cnl_H__
+#ifndef __ADSP_CAVS_H__
+#define __ADSP_CAVS_H__
 
 /* IRQ numbers */
 #define IRQ_NUM_SOFTWARE0    0
@@ -44,9 +44,9 @@
 
 struct adsp_dev;
 
-void adsp_cnl_shim_init(struct adsp_dev *adsp, const char *name);
-void adsp_cnl_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg);
-void adsp_cnl_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg);
-void cnl_ext_timer_cb(void *opaque);
+void adsp_cavs_shim_init(struct adsp_dev *adsp, const char *name);
+void adsp_cavs_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg);
+void adsp_cavs_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg);
+void cavs_ext_timer_cb(void *opaque);
 
 #endif

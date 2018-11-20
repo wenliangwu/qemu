@@ -28,10 +28,12 @@
 #include "qapi/error.h"
 #include "qemu-common.h"
 #include "exec/hwaddr.h"
+#include "exec/memory.h"
 
 /* Generic constants */
 #define ADSP_MAX_SSP				6
 #define ADSP_MAX_GP_DMAC			3
+#define ADSP_MAX_IO                 32
 #define ADSP_MAILBOX_SIZE			0x00001000
 #define ADSP_MMIO_SIZE				0x00200000
 #define ADSP_PCI_SIZE				0x00001000
@@ -62,6 +64,13 @@ struct adsp_reg_space {
 	struct adsp_mem_desc desc;
 };
 
+struct adsp_io_info {
+    MemoryRegion io;
+    struct adsp_dev *adsp;
+    int io_dev;
+    uint32_t *region;
+};
+
 struct adsp_desc {
 	const char *name;	/* machine name */
 
@@ -84,13 +93,14 @@ struct adsp_desc {
 	/* devices */
 	int num_ssp;
 	int num_dmac;
+	int num_io;
 	struct adsp_reg_space ssp_dev[ADSP_MAX_SSP];
 	struct adsp_reg_space mbox_dev;
 	struct adsp_reg_space shim_dev;
 	struct adsp_reg_space gp_dmac_dev[ADSP_MAX_GP_DMAC];
 	struct adsp_reg_space pci_dev;
 
-	struct adsp_reg_space io_dev; /* misc device atm */	
+	struct adsp_reg_space io_dev[ADSP_MAX_IO]; /* misc device atm */
 };
 
 int adsp_load_modules(struct adsp_dev *adsp, void *fw, size_t size);
