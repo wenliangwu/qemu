@@ -22,7 +22,7 @@
 #include "hw/acpi/aml-build.h"
 #include "hw/audio/adsp-host.h"
 #include "hw/adsp/shim.h"
-#include "hw/adsp/bxt.h"
+#include "hw/adsp/cavs.h"
 #include "hw/adsp/log.h"
 
 static uint64_t bxt_pci_read(void *opaque, hwaddr addr,
@@ -82,9 +82,9 @@ return;
     /* resources */
     crs = aml_resource_template();
     aml_append(crs,
-    aml_memory32_fixed(ADSP_BXT_MMIO_BASE, ADSP_MMIO_SIZE, AML_READ_ONLY));
+    aml_memory32_fixed(ADSP_CAVS_MMIO_BASE, ADSP_MMIO_SIZE, AML_READ_ONLY));
     aml_append(crs,
-    aml_memory32_fixed(ADSP_BXT_PCI_BASE, ADSP_PCI_SIZE, AML_READ_ONLY));
+    aml_memory32_fixed(ADSP_CAVS_PCI_BASE, ADSP_PCI_SIZE, AML_READ_ONLY));
     aml_append(crs, aml_memory32_fixed(0x55AA55AA, 0x00100000, AML_READ_ONLY));
     aml_append(crs, aml_irq_no_flags(0xb));
     aml_append(dev, aml_name_decl("_CRS", crs));

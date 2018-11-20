@@ -145,10 +145,11 @@
 #define ADSP_IO_SHM_MBOX	3
 #define ADSP_IO_SHM_LP_SRAM	4
 #define ADSP_IO_SHM_ROM		5
-#define ADSP_IO_SHM_IO		6
-#define ADSP_IO_SHM_UNCACHE	7
-#define ADSP_IO_SHM_IMR 8
-#define ADSP_IO_SHM_DMAC(dmac)			(16 + dmac)
+#define ADSP_IO_SHM_UNCACHE	6
+#define ADSP_IO_SHM_IMR 7
+#define ADSP_IO_SHM_IO(x)     (8 + x)
+
+#define ADSP_IO_SHM_DMAC(dmac)			(32 + dmac)
 #define ADSP_IO_SHM_DMA(c, chan)		((c + 1) * 16 + chan)
 
 /* messages */
