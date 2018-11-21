@@ -23,8 +23,8 @@
 
 /* hardware memory map */
 static const struct adsp_desc bxt_board = {
-    .iram = {.base = 0xFE4c0000, .size = ADSP_CAVS_DSP_SRAM_SIZE},
-    .dram0 = {.base = 0xFE500000, .size = ADSP_CAVS_DSP_HP_SRAM_SIZE},
+    .iram = {.base = 0xFE4c0000, .size = ADSP_CAVS_1_5_DSP_SRAM_SIZE},
+    .dram0 = {.base = 0xFE500000, .size = ADSP_CAVS_1_5_DSP_HP_SRAM_SIZE},
     .pci =  {.base = 0xFE830000, .size = 0x1000},
 
     /* TODO add HDA base */
