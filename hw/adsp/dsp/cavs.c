@@ -56,7 +56,7 @@ static uint64_t io_read(void *opaque, hwaddr addr,
     log_read(adsp->log, &adsp->desc->io_dev[info->io_dev], addr, size,
         info->region[addr >> 2]);
 
-    return adsp->common_io[addr >> 2];
+    return info->region[addr >> 2];
 }
 
 /* SHIM IO from ADSP */
@@ -343,9 +343,9 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     if (adsp->rom_filename != NULL) {
 
          /* copy manifest to IMR */
-         memcpy(adsp->imr + ADSP_CAVS_DSP_IMR_MAN_OFFSET, (void*)hdr,
+         memcpy(adsp->imr + board->imr_boot_ldr_offset, (void*)hdr,
                  hdr->preload_page_count * 4096);
-         printf("ROM loader: copy %d pages to IMR\n", hdr->preload_page_count);
+         printf("ROM loader: copy %d kernel pages to IMR\n", hdr->preload_page_count);
          return adsp;
     }
 
@@ -364,9 +364,10 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
             ssize = mod->segment[j].flags.r.length * 4096;
 
             /* L2 cache */
-            if (mod->segment[j].v_base_addr >= ADSP_CAVS_DSP_SRAM_BASE &&
-                mod->segment[j].v_base_addr < ADSP_CAVS_DSP_SRAM_BASE + ADSP_CAVS_DSP_SRAM_SIZE) {
-	    	soffset = mod->segment[j].v_base_addr - ADSP_CAVS_DSP_SRAM_BASE;
+            if (mod->segment[j].v_base_addr >= board->iram.base &&
+                mod->segment[j].v_base_addr < board->iram.base + board->iram.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->iram.base;
  
                 printf(" L2 segment %d file offset 0x%lx L2$ addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
@@ -378,9 +379,10 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
             }
 
             /* HP SRAM */
-            if (mod->segment[j].v_base_addr >= ADSP_CAVS_DSP_HP_SRAM_BASE &&
-                mod->segment[j].v_base_addr < ADSP_CAVS_DSP_HP_SRAM_BASE + ADSP_CAVS_DSP_HP_SRAM_SIZE) {
-	    	soffset = mod->segment[j].v_base_addr - ADSP_CAVS_DSP_HP_SRAM_BASE;
+            if (mod->segment[j].v_base_addr >= board->dram0.base &&
+                mod->segment[j].v_base_addr < board->dram0.base + board->dram0.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->dram0.base;
  
                 printf(" HP segment %d file offset 0x%lx HP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
@@ -392,9 +394,10 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
             }
 
             /* LP SRAM */
-            if (mod->segment[j].v_base_addr >= ADSP_CAVS_DSP_LP_SRAM_BASE &&
-                mod->segment[j].v_base_addr < ADSP_CAVS_DSP_LP_SRAM_BASE + ADSP_CAVS_DSP_LP_SRAM_SIZE) {
-	    	soffset = mod->segment[j].v_base_addr - ADSP_CAVS_DSP_LP_SRAM_BASE;
+            if (mod->segment[j].v_base_addr >= board->lp_sram.base &&
+                mod->segment[j].v_base_addr < board->lp_sram.base + board->lp_sram.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->lp_sram.base;
  
                 printf(" LP segment %d file offset 0x%lx LP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
@@ -406,10 +409,11 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
             }
 
 	        /* Uncache */
-            if (mod->segment[j].v_base_addr >= ADSP_CAVS_DSP_UNCACHE_BASE &&
-                mod->segment[j].v_base_addr < ADSP_CAVS_DSP_UNCACHE_BASE +
-			 ADSP_CAVS_DSP_UNCACHE_SIZE) {
-	    	soffset = mod->segment[j].v_base_addr - ADSP_CAVS_DSP_UNCACHE_BASE;
+            if (mod->segment[j].v_base_addr >= board->uncache.base &&
+                mod->segment[j].v_base_addr < board->uncache.base +
+                board->uncache.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->uncache.base;
  
                 printf(" Uncache segment %d file offset 0x%lx Uncache addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
@@ -421,10 +425,11 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
             }
 
              /* IMR */
-            if (mod->segment[j].v_base_addr >= ADSP_CAVS_DSP_IMR_BASE &&
-                mod->segment[j].v_base_addr < ADSP_CAVS_DSP_IMR_BASE +
-             ADSP_CAVS_DSP_IMR_SIZE) {
-            soffset = mod->segment[j].v_base_addr - ADSP_CAVS_DSP_IMR_BASE;
+            if (mod->segment[j].v_base_addr >= board->imr.base &&
+                mod->segment[j].v_base_addr < board->imr.base +
+                board->imr.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->imr.base;
 
                 printf(" IMR segment %d file offset 0x%lx IMR addr 0x%x offset 0x%lx size 0x%lx\n",
                     j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
@@ -443,202 +448,217 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     return adsp;
 }
 
-/* hardware memory map */
-static const struct adsp_desc cavs_dsp_desc = {
-    .ia_irq = IRQ_NUM_EXT_IA,
-    .ext_timer_irq = IRQ_NUM_EXT_TIMER,
-    .pmc_irq = IRQ_NUM_EXT_PMC,
-
-    .num_ssp = 3,
-    .num_dmac = 2,
-    .iram = {.base = ADSP_CAVS_DSP_SRAM_BASE, .size = ADSP_CAVS_DSP_SRAM_SIZE},
-    .dram0 = {.base = ADSP_CAVS_DSP_HP_SRAM_BASE, .size = ADSP_CAVS_DSP_HP_SRAM_SIZE},
-    .lp_sram = {.base = ADSP_CAVS_DSP_LP_SRAM_BASE, .size = ADSP_CAVS_DSP_LP_SRAM_SIZE},
-    .uncache = {.base = ADSP_CAVS_DSP_UNCACHE_BASE, .size = ADSP_CAVS_DSP_UNCACHE_SIZE},
-    .imr = {.base = ADSP_CAVS_DSP_IMR_BASE, .size = ADSP_CAVS_DSP_IMR_SIZE},
-    .rom = {.base = ADSP_CAVS_DSP_ROM_BASE, .size = ADSP_CAVS_DSP_ROM_SIZE},
-
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
-        .desc = {.base = ADSP_CAVS_DSP_MAILBOX_BASE, .size = ADSP_CAVS_DSP_MAILBOX_SIZE},
-    },
-
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_bxt_shim_map),
-        .reg = adsp_bxt_shim_map,
-        .desc = {.base = ADSP_CAVS_DSP_SHIM_BASE, .size = ADSP_CAVS_SHIM_SIZE},
-    },
-
-    .gp_dmac_dev[0] = {
-        .name = "dmac0",
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_CAVS_DSP_LP_GP_DMA_BASE(0), .size = ADSP_CAVS_DSP_LP_GP_DMA_SIZE},
-    },
-    .gp_dmac_dev[1] = {
-        .name = "dmac1",
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_CAVS_DSP_HP_GP_DMA_BASE(0), .size = ADSP_CAVS_DSP_HP_GP_DMA_SIZE},
-    },
-    .ssp_dev[0] = {
-        .name = "ssp0",
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_CAVS_DSP_SSP_BASE(0), .size = ADSP_CAVS_DSP_SSP_SIZE},
-    },
-    .ssp_dev[1] = {
-        .name = "ssp1",
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_CAVS_DSP_SSP_BASE(1), .size = ADSP_CAVS_DSP_SSP_SIZE},
-    },
-    .ssp_dev[2] = {
-        .name = "ssp2",
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_CAVS_DSP_SSP_BASE(2), .size = ADSP_CAVS_DSP_SSP_SIZE},
-    },
-
-    .num_io = 14,
-    .io_dev = {
+/* CAVS 1.5 IO devices */
+static struct adsp_reg_space cavs_1_5_io[] = {
         { .name = "cmd", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_CMD_BASE, .size = ADSP_CAVS_DSP_CMD_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_CMD_BASE, .size = ADSP_CAVS_1_5_DSP_CMD_SIZE},},
         { .name = "res", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_RES_BASE, .size = ADSP_CAVS_DSP_RES_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_RES_BASE, .size = ADSP_CAVS_1_5_DSP_RES_SIZE},},
         { .name = "ipc", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_DSP_IPC_HOST_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_5_DSP_IPC_HOST_SIZE},},
         { .name = "idc0", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IPC_DSP_BASE(0), .size = ADSP_CAVS_DSP_IPC_DSP_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_IPC_DSP_BASE(0), .size = ADSP_CAVS_1_5_DSP_IPC_DSP_SIZE},},
         { .name = "idc1", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IPC_DSP_BASE(1), .size = ADSP_CAVS_DSP_IPC_DSP_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_IPC_DSP_BASE(1), .size = ADSP_CAVS_1_5_DSP_IPC_DSP_SIZE},},
         { .name = "hostwin0", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(0), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_HOST_WIN_BASE(0), .size = ADSP_CAVS_1_5_DSP_HOST_WIN_SIZE},},
         { .name = "hostwin1", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(1), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_HOST_WIN_BASE(1), .size = ADSP_CAVS_1_5_DSP_HOST_WIN_SIZE},},
         { .name = "hostwin2", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(2), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_HOST_WIN_BASE(2), .size = ADSP_CAVS_1_5_DSP_HOST_WIN_SIZE},},
         { .name = "hostwin3", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(3), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_HOST_WIN_BASE(3), .size = ADSP_CAVS_1_5_DSP_HOST_WIN_SIZE},},
         { .name = "irq", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IRQ_BASE, .size = ADSP_CAVS_DSP_IRQ_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_IRQ_BASE, .size = ADSP_CAVS_1_5_DSP_IRQ_SIZE},},
         { .name = "timer", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_TIME_BASE, .size = ADSP_CAVS_DSP_TIME_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_TIME_BASE, .size = ADSP_CAVS_1_5_DSP_TIME_SIZE},},
         { .name = "mn", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_MN_BASE, .size = ADSP_CAVS_DSP_MN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_MN_BASE, .size = ADSP_CAVS_1_5_DSP_MN_SIZE},},
         { .name = "l2", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_L2_BASE, .size = ADSP_CAVS_DSP_L2_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_5_DSP_L2_BASE, .size = ADSP_CAVS_1_5_DSP_L2_SIZE},},
         { .name = "l2", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_L2_BASE, .size = ADSP_CAVS_DSP_L2_SIZE},},
-        { .name = "gpdma0", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_GPDMA_CLKCTL_BASE(0), .size = ADSP_CAVS_DSP_GPDMA_CLKCTL_SIZE},},
-    },
+            .desc = {.base = ADSP_CAVS_1_5_DSP_L2_BASE, .size = ADSP_CAVS_1_5_DSP_L2_SIZE},},
+       // { .name = "gpdma0", .reg_count = 0, .reg = NULL,
+        //    .desc = {.base = ADSP_CAVS_DSP_GPDMA_CLKCTL_BASE(0), .size = ADSP_CAVS_DSP_GPDMA_CLKCTL_SIZE},},
 };
 
-static const struct adsp_desc sue_dsp_desc = {
+/* hardware memory map for SKL, KBL, APL */
+static const struct adsp_desc cavs_1_5_dsp_desc = {
     .ia_irq = IRQ_NUM_EXT_IA,
     .ext_timer_irq = IRQ_NUM_EXT_TIMER,
     .pmc_irq = IRQ_NUM_EXT_PMC,
 
     .num_ssp = 3,
     .num_dmac = 2,
-    .iram = {.base = ADSP_CAVS_DSP_SRAM_BASE, .size = ADSP_CAVS_DSP_SRAM_SIZE},
-    .dram0 = {.base = ADSP_CAVS_DSP_HP_SRAM_BASE, .size = ADSP_CAVS_DSP_HP_SRAM_SIZE},
-    .lp_sram = {.base = ADSP_CAVS_DSP_LP_SRAM_BASE, .size = ADSP_CAVS_DSP_LP_SRAM_SIZE},
-    .uncache = {.base = ADSP_CAVS_DSP_UNCACHE_BASE, .size = ADSP_CAVS_DSP_UNCACHE_SIZE},
-    .imr = {.base = ADSP_CAVS_DSP_IMR_BASE, .size = ADSP_CAVS_DSP_IMR_SIZE},
+    .iram = {.base = ADSP_CAVS_1_5_DSP_SRAM_BASE, .size = ADSP_CAVS_1_5_DSP_SRAM_SIZE},
+    .dram0 = {.base = ADSP_CAVS_1_5_DSP_HP_SRAM_BASE, .size = ADSP_CAVS_1_5_DSP_HP_SRAM_SIZE},
+    .lp_sram = {.base = ADSP_CAVS_1_5_DSP_LP_SRAM_BASE, .size = ADSP_CAVS_1_5_DSP_LP_SRAM_SIZE},
+    .uncache = {.base = ADSP_CAVS_1_5_DSP_UNCACHE_BASE, .size = ADSP_CAVS_1_5_DSP_UNCACHE_SIZE},
+    .imr = {.base = ADSP_CAVS_1_5_DSP_IMR_BASE, .size = ADSP_CAVS_1_5_DSP_IMR_SIZE},
     .rom = {.base = ADSP_CAVS_DSP_ROM_BASE, .size = ADSP_CAVS_DSP_ROM_SIZE},
-
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
-        .desc = {.base = ADSP_CAVS_DSP_MAILBOX_BASE, .size = ADSP_CAVS_DSP_MAILBOX_SIZE},
-    },
+    .imr_boot_ldr_offset = ADSP_CAVS_1_5_DSP_IMR_MAN_OFFSET,
 
     .shim_dev = {
         .name = "shim",
         .reg_count = ARRAY_SIZE(adsp_bxt_shim_map),
         .reg = adsp_bxt_shim_map,
-        .desc = {.base = ADSP_CAVS_DSP_SHIM_BASE, .size = ADSP_CAVS_SHIM_SIZE},
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SHIM_BASE, .size = ADSP_CAVS_1_5_SHIM_SIZE},
     },
 
     .gp_dmac_dev[0] = {
         .name = "dmac0",
         .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
         .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_CAVS_DSP_LP_GP_DMA_BASE(0), .size = ADSP_CAVS_DSP_LP_GP_DMA_SIZE},
+        .desc = {.base = ADSP_CAVS_1_5_DSP_LP_GP_DMA_BASE(0), .size = ADSP_CAVS_1_5_DSP_LP_GP_DMA_SIZE},
     },
     .gp_dmac_dev[1] = {
         .name = "dmac1",
         .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
         .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_CAVS_DSP_HP_GP_DMA_BASE(0), .size = ADSP_CAVS_DSP_HP_GP_DMA_SIZE},
+        .desc = {.base = ADSP_CAVS_1_5_DSP_HP_GP_DMA_BASE(0), .size = ADSP_CAVS_1_5_DSP_HP_GP_DMA_SIZE},
     },
     .ssp_dev[0] = {
         .name = "ssp0",
         .reg_count = ARRAY_SIZE(adsp_ssp_map),
         .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_CAVS_DSP_SSP_BASE(0), .size = ADSP_CAVS_DSP_SSP_SIZE},
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SSP_BASE(0), .size = ADSP_CAVS_1_5_DSP_SSP_SIZE},
     },
     .ssp_dev[1] = {
         .name = "ssp1",
         .reg_count = ARRAY_SIZE(adsp_ssp_map),
         .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_CAVS_DSP_SSP_BASE(1), .size = ADSP_CAVS_DSP_SSP_SIZE},
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SSP_BASE(1), .size = ADSP_CAVS_1_5_DSP_SSP_SIZE},
     },
     .ssp_dev[2] = {
         .name = "ssp2",
         .reg_count = ARRAY_SIZE(adsp_ssp_map),
         .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_CAVS_DSP_SSP_BASE(2), .size = ADSP_CAVS_DSP_SSP_SIZE},
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SSP_BASE(2), .size = ADSP_CAVS_1_5_DSP_SSP_SIZE},
     },
 
-    .num_io = 16,
-    .io_dev = {
-        { .name = "cmd", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_CMD_BASE, .size = ADSP_CAVS_DSP_CMD_SIZE},},
-        { .name = "res", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_RES_BASE, .size = ADSP_CAVS_DSP_RES_SIZE},},
-        { .name = "ipc", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_DSP_IPC_HOST_SIZE},},
+    .num_io = ARRAY_SIZE(cavs_1_5_io),
+    .io_dev = cavs_1_5_io,
+};
+
+/* CAVS 1.8 IO devices */
+static struct adsp_reg_space cavs_1_8_io[] = {
+        { .name = "cap", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_CAP_BASE, .size = ADSP_CAVS_1_8_DSP_CAP_SIZE},},
+        { .name = "hp-gpdma-shim", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_HP_GPDMA_SHIM_BASE, .size = ADSP_CAVS_1_8_DSP_HP_GPDMA_SHIM_SIZE},},
         { .name = "idc0", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IPC_DSP_BASE(0), .size = ADSP_CAVS_DSP_IPC_DSP_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_IDC_DSP_BASE(0), .size = ADSP_CAVS_1_8_DSP_IDC_DSP_SIZE},},
         { .name = "idc1", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IPC_DSP_BASE(1), .size = ADSP_CAVS_DSP_IPC_DSP_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_IDC_DSP_BASE(1), .size = ADSP_CAVS_1_8_DSP_IDC_DSP_SIZE},},
+        { .name = "idc2", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_IDC_DSP_BASE(2), .size = ADSP_CAVS_1_8_DSP_IDC_DSP_SIZE},},
+        { .name = "idc3", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_IDC_DSP_BASE(3), .size = ADSP_CAVS_1_8_DSP_IDC_DSP_SIZE},},
         { .name = "hostwin0", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(0), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_HOST_WIN_BASE(0), .size = ADSP_CAVS_1_8_DSP_HOST_WIN_SIZE},},
         { .name = "hostwin1", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(1), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_HOST_WIN_BASE(1), .size = ADSP_CAVS_1_8_DSP_HOST_WIN_SIZE},},
         { .name = "hostwin2", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(2), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_HOST_WIN_BASE(2), .size = ADSP_CAVS_1_8_DSP_HOST_WIN_SIZE},},
         { .name = "hostwin3", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_HOST_WIN_BASE(3), .size = ADSP_CAVS_DSP_HOST_WIN_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_HOST_WIN_BASE(3), .size = ADSP_CAVS_1_8_DSP_HOST_WIN_SIZE},},
         { .name = "irq", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_IRQ_BASE, .size = ADSP_CAVS_DSP_IRQ_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_IRQ_BASE, .size = ADSP_CAVS_1_8_DSP_IRQ_SIZE},},
         { .name = "timer", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_TIME_BASE, .size = ADSP_CAVS_DSP_TIME_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_TIME_BASE, .size = ADSP_CAVS_1_8_DSP_TIME_SIZE},},
         { .name = "mn", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_MN_BASE, .size = ADSP_CAVS_DSP_MN_SIZE},},
-        { .name = "l2", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_SUE_DSP_L2_BASE, .size = ADSP_CAVS_SUE_DSP_L2_SIZE},},
-        { .name = "hsp", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_SUE_DSP_HS_BASE, .size = ADSP_CAVS_SUE_DSP_HS_SIZE},},
-        { .name = "lsp", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_SUE_DSP_LS_BASE, .size = ADSP_CAVS_SUE_DSP_LS_SIZE},},
-        { .name = "gpdma0", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_DSP_GPDMA_CLKCTL_BASE(0), .size = ADSP_CAVS_DSP_GPDMA_CLKCTL_SIZE},},
+            .desc = {.base = ADSP_CAVS_1_8_DSP_MN_BASE, .size = ADSP_CAVS_1_8_DSP_MN_SIZE},},
+        { .name = "l2m", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_L2M_BASE, .size = ADSP_CAVS_1_8_DSP_L2M_SIZE},},
+        { .name = "l2c", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_L2C_BASE, .size = ADSP_CAVS_1_8_DSP_L2C_SIZE},},
+        { .name = "res", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_RES_BASE, .size = ADSP_CAVS_1_8_DSP_RES_SIZE},},
+        { .name = "cmd", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_CMD_BASE, .size = ADSP_CAVS_1_8_DSP_CMD_SIZE},},
+        { .name = "dmic", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_DMIC_BASE, .size = ADSP_CAVS_1_8_DSP_DMIC_SIZE},},
+        { .name = "ipc", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_8_DSP_IPC_HOST_SIZE},},
+        { .name = "gtw-lout", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_SIZE * 14},},
+        { .name = "gtw-lin", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_IN_STREAM_SIZE * 14},},
+        { .name = "gtw-hout", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_HOST_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_HOST_OUT_STREAM_SIZE * 14},},
+        { .name = "gtw-hin", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_HOST_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_HOST_IN_STREAM_SIZE * 14},},
+        { .name = "cl", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_BASE, .size = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_SIZE},},
+        { .name = "lp-gpda-shim", .reg_count = 0, .reg = NULL,
+            .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GPDMA_SHIM_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GPDMA_SHIM_SIZE * 4},},
+      //  { .name = "lp-gpdma", .reg_count = 0, .reg = NULL,
+      //      .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_SIZE * 4},},
+};
+
+/* SUE and CNL */
+static const struct adsp_desc cavs_1_8_dsp_desc = {
+    .ia_irq = IRQ_NUM_EXT_IA,
+    .ext_timer_irq = IRQ_NUM_EXT_TIMER,
+    .pmc_irq = IRQ_NUM_EXT_PMC,
+
+    .num_ssp = 3,
+    .num_dmac = 2,
+    .iram = {.base = ADSP_CAVS_1_8_DSP_SRAM_BASE, .size = ADSP_CAVS_1_8_DSP_SRAM_SIZE},
+    .dram0 = {.base = ADSP_CAVS_1_8_DSP_HP_SRAM_BASE, .size = ADSP_CAVS_1_8_DSP_HP_SRAM_SIZE},
+    .lp_sram = {.base = ADSP_CAVS_1_8_DSP_LP_SRAM_BASE, .size = ADSP_CAVS_1_8_DSP_LP_SRAM_SIZE},
+    .uncache = {.base = ADSP_CAVS_1_8_DSP_UNCACHE_BASE, .size = ADSP_CAVS_1_8_DSP_UNCACHE_SIZE},
+    .imr = {.base = ADSP_CAVS_1_8_DSP_IMR_BASE, .size = ADSP_CAVS_1_8_DSP_IMR_SIZE},
+    .rom = {.base = ADSP_CAVS_DSP_ROM_BASE, .size = ADSP_CAVS_DSP_ROM_SIZE},
+    .imr_boot_ldr_offset = ADSP_CAVS_1_8_DSP_IMR_MAN_OFFSET,
+
+    .shim_dev = {
+        .name = "shim",
+        .reg_count = ARRAY_SIZE(adsp_bxt_shim_map),
+        .reg = adsp_bxt_shim_map,
+        .desc = {.base = ADSP_CAVS_1_8_DSP_SHIM_BASE, .size = ADSP_CAVS_1_8_DSP_SHIM_SIZE},
     },
+
+    .gp_dmac_dev[0] = {
+        .name = "dmac0",
+        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map,
+        .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_SIZE},
+    },
+    .gp_dmac_dev[1] = {
+        .name = "dmac1",
+        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map,
+        .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_BASE(1), .size = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_SIZE},
+    },
+    .ssp_dev[0] = {
+        .name = "ssp0",
+        .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map,
+        .desc = {.base = ADSP_CAVS_1_8_DSP_SSP_BASE(0), .size = ADSP_CAVS_1_8_DSP_SSP_SIZE},
+    },
+    .ssp_dev[1] = {
+        .name = "ssp1",
+        .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map,
+        .desc = {.base = ADSP_CAVS_1_8_DSP_SSP_BASE(1), .size = ADSP_CAVS_1_8_DSP_SSP_SIZE},
+    },
+    .ssp_dev[2] = {
+        .name = "ssp2",
+        .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map,
+        .desc = {.base = ADSP_CAVS_1_8_DSP_SSP_BASE(2), .size = ADSP_CAVS_1_8_DSP_SSP_SIZE},
+    },
+
+    .num_io = ARRAY_SIZE(cavs_1_8_io),
+    .io_dev = cavs_1_8_io,
 };
 
 static void bxt_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&cavs_dsp_desc, machine, "bxt");
+    adsp = adsp_init(&cavs_1_5_dsp_desc, machine, "bxt");
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
@@ -659,7 +679,7 @@ static void sue_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&sue_dsp_desc, machine, "sue");
+    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "sue");
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
@@ -680,7 +700,7 @@ static void cnl_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&cavs_dsp_desc, machine, "cnl");
+    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "cnl");
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
