@@ -716,3 +716,24 @@ static void xtensa_cnl_machine_init(MachineClass *mc)
 }
 
 DEFINE_MACHINE("adsp_cnl", xtensa_cnl_machine_init)
+
+static void icl_adsp_init(MachineState *machine)
+{
+    struct adsp_dev *adsp;
+
+    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "icl");
+
+    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
+    adsp->ext_clk_kHz = 2500;
+}
+
+static void xtensa_icl_machine_init(MachineClass *mc)
+{
+    mc->desc = "Icelake HiFi3";
+    mc->is_default = true;
+    mc->init = icl_adsp_init;
+    mc->max_cpus = 4;
+    mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
+}
+
+DEFINE_MACHINE("adsp_icl", xtensa_icl_machine_init)

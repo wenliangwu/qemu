@@ -1,7 +1,7 @@
 if [ $# -lt 1 ]
 then
   echo "usage: $0 device [-k kernel] [-t] [-d] [-i] [-r rom] [-c] [-g] [-o time log]"
-  echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl"
+  echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl, icl"
   echo "[-k] | [--kernel]: load firmware kernel image"
   echo "[-r] | [--rom]: load firmware ROM image"
   echo "[-t] | [--trace]: trace DSP instructions"
@@ -43,9 +43,13 @@ case $1 in
  CPU="cannonlake"
  ADSP="adsp_cnl"
  ;;
+*icl)
+ CPU="icelake"
+ ADSP="adsp_icl"
+ ;;
 *)
   echo "usage: $0 device"
-  echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl"
+  echo "supported devices: byt, cht, hsw, bdw, bxt, sue, cnl, icl"
   ./xtensa-softmmu/qemu-system-xtensa -machine help
   exit
   ;;
