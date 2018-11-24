@@ -257,9 +257,6 @@ struct adsp_meta_file_ext {
 	struct component_desc comp_desc[MAN_BXT_NUM_MODULES];
 } __attribute__((packed));
 
-
-
-
 /* FW Extended Manifest Header id = $AE1 */
 #define EXT_MANIFEST_HEADER_MAGIC   0x31454124
 
@@ -283,5 +280,32 @@ struct fw_image_manifest {
 	uint8_t padding[MAN_DESC_PADDING_SIZE];
 	struct adsp_fw_desc desc; 	/* at offset MAN_DESC_OFFSET */
 } __attribute__((packed));
+
+/*
+ * Manifest 1.5
+ */
+
+struct css_header_v1_5 {
+    uint32_t    module_type;
+    uint32_t    header_len;
+    uint32_t    header_version;
+    uint32_t    reserved0;          /* must be 0x0 */
+    uint32_t    module_vendor;
+    uint32_t    date;
+    uint32_t    size;
+    uint32_t    key_size;
+    uint32_t    modulus_size;
+    uint32_t    exponent_size;
+    uint32_t    reserved[22];
+    uint8_t     modulus[MAN_RSA_KEY_MODULUS_LEN];
+    uint8_t     exponent[MAN_RSA_KEY_EXPONENT_LEN];
+    uint8_t     signature[MAN_RSA_SIGNATURE_LEN];
+} __attribute__((packed));
+
+struct fw_image_manifest_v1_5 {
+    struct css_header_v1_5 css_header;
+    struct adsp_fw_desc desc;
+} __attribute__((packed));
+
 
 #endif
