@@ -90,6 +90,7 @@ struct adsp_desc {
 	uint32_t host_iram_offset;
 	uint32_t host_dram_offset;
 	uint32_t imr_boot_ldr_offset;
+	uint32_t file_offset;
 
 	/* devices */
 	int num_ssp;

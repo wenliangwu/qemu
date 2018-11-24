@@ -146,7 +146,7 @@ static void init_memory(struct adsp_dev *adsp, const char *name)
         board->dram0.base, dram0);
     adsp->hp_sram = ptr;
 
-   /* Uncache HP-SRAM (same HP-SRAM, just mapped at different addr)  */
+    /* Uncache HP-SRAM (same HP-SRAM, just mapped at different addr)  */
     sprintf(shm_name, "%s-uncache", name);
     uncache = g_malloc(sizeof(*uncache));
     memory_region_init_ram_ptr(uncache, NULL, "lpe.uncache", board->uncache.size, ptr);
@@ -247,15 +247,135 @@ static int bridge_cb(void *data, struct qemu_io_msg *msg)
     return 0;
 }
 
+static void copy_man_modules(const struct adsp_desc *board, struct adsp_dev *adsp,
+    struct adsp_fw_desc *desc)
+{
+    struct module *mod;
+    struct adsp_fw_header *hdr = &desc->header;
+    unsigned long foffset, soffset, ssize;
+    void *base_ptr = desc;
+    int i, j;
+
+    base_ptr -= board->file_offset;
+
+    printf("found %d modules\n", hdr->num_module_entries);
+    printf("using file offset 0x%x\n", board->file_offset);
+
+    /* copy modules to SRAM */
+    for (i = 0; i < hdr->num_module_entries; i++) {
+
+        mod = &desc->module[i];
+        printf("checking module %d : %s\n", i, mod->name);
+
+        for (j = 0; j < 3; j++) {
+
+            if (mod->segment[j].flags.r.load == 0)
+                continue;
+
+            foffset = mod->segment[j].file_offset;
+            ssize = mod->segment[j].flags.r.length * 4096;
+
+            /* L2 cache */
+            if (mod->segment[j].v_base_addr >= board->iram.base &&
+                mod->segment[j].v_base_addr < board->iram.base + board->iram.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->iram.base;
+
+                printf(" L2 segment %d file offset 0x%lx L2$ addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                memcpy(adsp->sram + soffset,
+                    (void*)base_ptr + foffset, ssize);
+                continue;
+            }
+
+            /* HP SRAM */
+            if (mod->segment[j].v_base_addr >= board->dram0.base &&
+                mod->segment[j].v_base_addr < board->dram0.base + board->dram0.size) {
+
+                soffset =
+                mod->segment[j].v_base_addr - board->dram0.base;
+
+                printf(" HP segment %d file offset 0x%lx HP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                memcpy(adsp->hp_sram + soffset,
+                    (void*)base_ptr + foffset, ssize);
+                continue;
+            }
+
+            /* LP SRAM */
+            if (mod->segment[j].v_base_addr >= board->lp_sram.base &&
+                mod->segment[j].v_base_addr < board->lp_sram.base + board->lp_sram.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->lp_sram.base;
+
+                printf(" LP segment %d file offset 0x%lx LP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                memcpy(adsp->lp_sram + soffset,
+                    (void*)base_ptr + foffset, ssize);
+                continue;
+            }
+
+            /* Uncache */
+            if (mod->segment[j].v_base_addr >= board->uncache.base &&
+                mod->segment[j].v_base_addr < board->uncache.base +
+                board->uncache.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->uncache.base;
+
+                printf(" Uncache segment %d file offset 0x%lx Uncache addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                memcpy(adsp->uncache + soffset,
+                    (void*)base_ptr + foffset, ssize);
+                continue;
+            }
+
+             /* IMR */
+            if (mod->segment[j].v_base_addr >= board->imr.base &&
+                mod->segment[j].v_base_addr < board->imr.base +
+                board->imr.size) {
+
+                soffset = mod->segment[j].v_base_addr - board->imr.base;
+
+                printf(" IMR segment %d file offset 0x%lx IMR addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+
+                /* copy text to SRAM */
+                memcpy(adsp->imr + soffset,
+                    (void*)base_ptr + foffset, ssize);
+                continue;
+            }
+
+            printf(" Unmatched segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
+                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
+        }
+    }
+}
+
+static void copy_man_to_imr(const struct adsp_desc *board, struct adsp_dev *adsp,
+    struct adsp_fw_desc *desc)
+{
+   struct adsp_fw_header *hdr = &desc->header;
+
+    /* copy manifest to IMR */
+    memcpy(adsp->imr + board->imr_boot_ldr_offset, (void*)hdr,
+                 hdr->preload_page_count * 4096);
+    printf("ROM loader: copy %d kernel pages to IMR\n", hdr->preload_page_count);
+}
+
 static struct adsp_dev *adsp_init(const struct adsp_desc *board,
-    MachineState *machine, const char *name)
+    MachineState *machine, const char *name, int copy_modules)
 {
     struct adsp_dev *adsp;
-    struct fw_image_manifest *man;
-    struct module *mod;
-    struct adsp_fw_header *hdr;
-    unsigned long foffset, soffset, ssize;
-    int n, i, j;
+    void *man_ptr, *desc_ptr;
+    int n, skip = 0, size;
     void *rom;
 
     adsp = g_malloc(sizeof(*adsp));
@@ -327,122 +447,33 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     }
 
     /* load the binary image and copy to SRAM */
-    man = g_malloc(board->iram.size);
-    load_image_size(adsp->kernel_filename, man,
+    man_ptr = g_malloc(board->iram.size);
+    size = load_image_size(adsp->kernel_filename, man_ptr,
         board->iram.size);
 
-    /* HACK for ext manifest  ID = "$AE1" */
-    if (*((uint32_t*)man) == 0x31454124) {
-        man = (void*)man + 0x708; // HACK for ext manifest
-        printf("skipping extended manifest \n");
+    /* Search for manifest ID = "$AEM" */
+    desc_ptr = man_ptr;
+    while (*((uint32_t*)desc_ptr) != 0x314d4124) {
+        desc_ptr = desc_ptr + sizeof(uint32_t);
+        skip += sizeof(uint32_t);
+        if (skip >= size) {
+            printf("error: failed to find FW manifest header $AM1\n");
+            exit(0);
+        }
     }
 
-    hdr = &man->desc.header;
+    printf("Header $AM1 found at offset 0x%x bytes\n", skip);
 
     /* does ROM or VM load manifest */
-    if (adsp->rom_filename != NULL) {
+    if (adsp->rom_filename != NULL && !copy_modules) {
 
-         /* copy manifest to IMR */
-         memcpy(adsp->imr + board->imr_boot_ldr_offset, (void*)hdr,
-                 hdr->preload_page_count * 4096);
-         printf("ROM loader: copy %d kernel pages to IMR\n", hdr->preload_page_count);
-         return adsp;
-    }
+         /* copy whole manifest if required */
+         copy_man_to_imr(board, adsp, desc_ptr);
 
-    /* copy modules to SRAM */
-    for (i = 0; i < hdr->num_module_entries; i++) {
+    } else {
 
-	    mod = &man->desc.module[i];
-        printf("checking module %d got %d entries\n", i, hdr->num_module_entries);
-
-        for (j = 0; j < 3; j++) {
-
-            if (mod->segment[j].flags.r.load == 0)
-                continue;
-
-            foffset = mod->segment[j].file_offset;
-            ssize = mod->segment[j].flags.r.length * 4096;
-
-            /* L2 cache */
-            if (mod->segment[j].v_base_addr >= board->iram.base &&
-                mod->segment[j].v_base_addr < board->iram.base + board->iram.size) {
-
-                soffset = mod->segment[j].v_base_addr - board->iram.base;
- 
-                printf(" L2 segment %d file offset 0x%lx L2$ addr 0x%x offset 0x%lx size 0x%lx\n",
-                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
-
-                /* copy text to SRAM */
-                memcpy(adsp->sram + soffset,
-                    (void*)man + foffset, ssize);
-                continue;
-            }
-
-            /* HP SRAM */
-            if (mod->segment[j].v_base_addr >= board->dram0.base &&
-                mod->segment[j].v_base_addr < board->dram0.base + board->dram0.size) {
-
-                soffset = mod->segment[j].v_base_addr - board->dram0.base;
- 
-                printf(" HP segment %d file offset 0x%lx HP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
-                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
-
-                /* copy text to SRAM */
-                memcpy(adsp->hp_sram + soffset,
-                    (void*)man + foffset, ssize);
-                continue;
-            }
-
-            /* LP SRAM */
-            if (mod->segment[j].v_base_addr >= board->lp_sram.base &&
-                mod->segment[j].v_base_addr < board->lp_sram.base + board->lp_sram.size) {
-
-                soffset = mod->segment[j].v_base_addr - board->lp_sram.base;
- 
-                printf(" LP segment %d file offset 0x%lx LP-SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
-                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
-
-                /* copy text to SRAM */
-                memcpy(adsp->lp_sram + soffset,
-                    (void*)man + foffset, ssize);
-                continue;
-            }
-
-	        /* Uncache */
-            if (mod->segment[j].v_base_addr >= board->uncache.base &&
-                mod->segment[j].v_base_addr < board->uncache.base +
-                board->uncache.size) {
-
-                soffset = mod->segment[j].v_base_addr - board->uncache.base;
- 
-                printf(" Uncache segment %d file offset 0x%lx Uncache addr 0x%x offset 0x%lx size 0x%lx\n",
-                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
-
-                /* copy text to SRAM */
-                memcpy(adsp->uncache + soffset,
-                    (void*)man + foffset, ssize);
-                continue;
-            }
-
-             /* IMR */
-            if (mod->segment[j].v_base_addr >= board->imr.base &&
-                mod->segment[j].v_base_addr < board->imr.base +
-                board->imr.size) {
-
-                soffset = mod->segment[j].v_base_addr - board->imr.base;
-
-                printf(" IMR segment %d file offset 0x%lx IMR addr 0x%x offset 0x%lx size 0x%lx\n",
-                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
-
-                /* copy text to SRAM */
-                memcpy(adsp->imr + soffset,
-                    (void*)man + foffset, ssize);
-                continue;
-            }
-
-            printf(" Unmatched segment %d file offset 0x%lx SRAM addr 0x%x offset 0x%lx size 0x%lx\n",
-                    j, foffset, mod->segment[j].v_base_addr, soffset, ssize);
-        }
+        /* copy manifest modules if required */
+        copy_man_modules(board, adsp, desc_ptr);
     }
 
     return adsp;
@@ -476,13 +507,67 @@ static struct adsp_reg_space cavs_1_5_io[] = {
             .desc = {.base = ADSP_CAVS_1_5_DSP_MN_BASE, .size = ADSP_CAVS_1_5_DSP_MN_SIZE},},
         { .name = "l2", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_5_DSP_L2_BASE, .size = ADSP_CAVS_1_5_DSP_L2_SIZE},},
-        { .name = "l2", .reg_count = 0, .reg = NULL,
-            .desc = {.base = ADSP_CAVS_1_5_DSP_L2_BASE, .size = ADSP_CAVS_1_5_DSP_L2_SIZE},},
-       // { .name = "gpdma0", .reg_count = 0, .reg = NULL,
-        //    .desc = {.base = ADSP_CAVS_DSP_GPDMA_CLKCTL_BASE(0), .size = ADSP_CAVS_DSP_GPDMA_CLKCTL_SIZE},},
 };
 
-/* hardware memory map for SKL, KBL, APL */
+/* hardware memory map for APL */
+static const struct adsp_desc cavs_1_5p_dsp_desc = {
+    .ia_irq = IRQ_NUM_EXT_IA,
+    .ext_timer_irq = IRQ_NUM_EXT_TIMER,
+    .pmc_irq = IRQ_NUM_EXT_PMC,
+
+    .num_ssp = 3,
+    .num_dmac = 2,
+    .iram = {.base = ADSP_CAVS_1_5_DSP_SRAM_BASE, .size = ADSP_CAVS_1_5_DSP_SRAM_SIZE},
+    .dram0 = {.base = ADSP_CAVS_1_5_DSP_HP_SRAM_BASE, .size = ADSP_CAVS_1_5_DSP_HP_SRAM_SIZE},
+    .lp_sram = {.base = ADSP_CAVS_1_5_DSP_LP_SRAM_BASE, .size = ADSP_CAVS_1_5_DSP_LP_SRAM_SIZE},
+    .uncache = {.base = ADSP_CAVS_1_5_DSP_UNCACHE_BASE, .size = ADSP_CAVS_1_5_DSP_UNCACHE_SIZE},
+    .imr = {.base = ADSP_CAVS_1_5_DSP_IMR_BASE, .size = ADSP_CAVS_1_5_DSP_IMR_SIZE},
+    .rom = {.base = ADSP_CAVS_DSP_ROM_BASE, .size = ADSP_CAVS_DSP_ROM_SIZE},
+    .imr_boot_ldr_offset = ADSP_CAVS_1_5P_DSP_IMR_MAN_OFFSET,
+
+    .shim_dev = {
+        .name = "shim",
+        .reg_count = ARRAY_SIZE(adsp_bxt_shim_map),
+        .reg = adsp_bxt_shim_map,
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SHIM_BASE, .size = ADSP_CAVS_1_5_SHIM_SIZE},
+    },
+
+    .gp_dmac_dev[0] = {
+        .name = "dmac0",
+        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map,
+        .desc = {.base = ADSP_CAVS_1_5_DSP_LP_GP_DMA_BASE(0), .size = ADSP_CAVS_1_5_DSP_LP_GP_DMA_SIZE},
+    },
+    .gp_dmac_dev[1] = {
+        .name = "dmac1",
+        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map,
+        .desc = {.base = ADSP_CAVS_1_5_DSP_HP_GP_DMA_BASE(0), .size = ADSP_CAVS_1_5_DSP_HP_GP_DMA_SIZE},
+    },
+    .ssp_dev[0] = {
+        .name = "ssp0",
+        .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map,
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SSP_BASE(0), .size = ADSP_CAVS_1_5_DSP_SSP_SIZE},
+    },
+    .ssp_dev[1] = {
+        .name = "ssp1",
+        .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map,
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SSP_BASE(1), .size = ADSP_CAVS_1_5_DSP_SSP_SIZE},
+    },
+    .ssp_dev[2] = {
+        .name = "ssp2",
+        .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map,
+        .desc = {.base = ADSP_CAVS_1_5_DSP_SSP_BASE(2), .size = ADSP_CAVS_1_5_DSP_SSP_SIZE},
+    },
+
+    .num_io = ARRAY_SIZE(cavs_1_5_io),
+    .io_dev = cavs_1_5_io,
+};
+
+/* hardware memory map for SKL, KBL */
 static const struct adsp_desc cavs_1_5_dsp_desc = {
     .ia_irq = IRQ_NUM_EXT_IA,
     .ext_timer_irq = IRQ_NUM_EXT_TIMER,
@@ -497,6 +582,7 @@ static const struct adsp_desc cavs_1_5_dsp_desc = {
     .imr = {.base = ADSP_CAVS_1_5_DSP_IMR_BASE, .size = ADSP_CAVS_1_5_DSP_IMR_SIZE},
     .rom = {.base = ADSP_CAVS_DSP_ROM_BASE, .size = ADSP_CAVS_DSP_ROM_SIZE},
     .imr_boot_ldr_offset = ADSP_CAVS_1_5_DSP_IMR_MAN_OFFSET,
+    .file_offset = sizeof(struct fw_image_manifest_v1_5) - sizeof(struct adsp_fw_desc),
 
     .shim_dev = {
         .name = "shim",
@@ -592,8 +678,6 @@ static struct adsp_reg_space cavs_1_8_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_BASE, .size = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_SIZE},},
         { .name = "lp-gpda-shim", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GPDMA_SHIM_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GPDMA_SHIM_SIZE * 4},},
-      //  { .name = "lp-gpdma", .reg_count = 0, .reg = NULL,
-      //      .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_SIZE * 4},},
 };
 
 /* SUE and CNL */
@@ -658,7 +742,7 @@ static void bxt_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&cavs_1_5_dsp_desc, machine, "bxt");
+    adsp = adsp_init(&cavs_1_5p_dsp_desc, machine, "bxt", 0);
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
@@ -675,11 +759,53 @@ static void xtensa_bxt_machine_init(MachineClass *mc)
 
 DEFINE_MACHINE("adsp_bxt", xtensa_bxt_machine_init)
 
+static void skl_adsp_init(MachineState *machine)
+{
+    struct adsp_dev *adsp;
+
+    adsp = adsp_init(&cavs_1_5_dsp_desc, machine, "skl", 1);
+
+    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
+    adsp->ext_clk_kHz = 2500;
+}
+
+static void xtensa_skl_machine_init(MachineClass *mc)
+{
+    mc->desc = "Skylake HiFi3";
+    mc->is_default = true;
+    mc->init = skl_adsp_init;
+    mc->max_cpus = 2;
+    mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
+}
+
+DEFINE_MACHINE("adsp_skl", xtensa_skl_machine_init)
+
+static void kbl_adsp_init(MachineState *machine)
+{
+    struct adsp_dev *adsp;
+
+    adsp = adsp_init(&cavs_1_5_dsp_desc, machine, "kbl", 1);
+
+    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
+    adsp->ext_clk_kHz = 2500;
+}
+
+static void xtensa_kbl_machine_init(MachineClass *mc)
+{
+    mc->desc = "Kabylake HiFi3";
+    mc->is_default = true;
+    mc->init = kbl_adsp_init;
+    mc->max_cpus = 2;
+    mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
+}
+
+DEFINE_MACHINE("adsp_kbl", xtensa_kbl_machine_init)
+
 static void sue_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "sue");
+    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "sue", 0);
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
@@ -700,7 +826,7 @@ static void cnl_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "cnl");
+    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "cnl", 0);
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
@@ -721,7 +847,7 @@ static void icl_adsp_init(MachineState *machine)
 {
     struct adsp_dev *adsp;
 
-    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "icl");
+    adsp = adsp_init(&cavs_1_8_dsp_desc, machine, "icl", 0);
 
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
