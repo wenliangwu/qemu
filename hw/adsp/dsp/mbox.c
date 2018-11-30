@@ -52,61 +52,46 @@ const struct adsp_reg_desc adsp_mbox_map[ADSP_MBOX_AREAS] = {
 
 static void mbox_reset(void *opaque)
 {
-    struct adsp_dev *adsp = opaque;
-    const struct adsp_desc *board = adsp->desc;
+    struct adsp_io_info *info = opaque;
+    struct adsp_reg_space *space = info->space;
 
-    memset(adsp->mbox_io, 0, board->mbox_dev.desc.size);
+     memset(info->region, 0, space->desc.size);
 }
 
 static uint64_t adsp_mbox_read(void *opaque, hwaddr addr,
         unsigned size)
 {
-    struct adsp_dev *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
 
-    log_area_read(adsp->log, &adsp->desc->mbox_dev, addr, size,
-        adsp->mbox_io[addr >> 2]);
+    log_area_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
 
-    return adsp->mbox_io[addr >> 2];
+    return info->region[addr >> 2];
 }
 
 static void adsp_mbox_write(void *opaque, hwaddr addr,
         uint64_t val, unsigned size)
 {
-    struct adsp_dev *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
 
-    log_area_write(adsp->log, &adsp->desc->mbox_dev, addr, val, size,
-                adsp->mbox_io[addr >> 2]);
+    log_area_write(adsp->log, space, addr, val, size,
+                info->region[addr >> 2]);
 
-    adsp->mbox_io[addr >> 2] = val;
+    info->region[addr >> 2] = val;
 }
 
-static const MemoryRegionOps adsp_mbox_ops = {
+const MemoryRegionOps adsp_mbox_ops = {
     .read = adsp_mbox_read,
     .write = adsp_mbox_write,
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-void adsp_mbox_init(struct adsp_dev *adsp, const char *name)
+void adsp_mbox_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
 {
-    MemoryRegion *mbox;
-    const struct adsp_desc *board = adsp->desc;
-    int err;
-    char mbox_name[32];
-
-    /* Mailbox - shared via SHM */
-    mbox = g_malloc(sizeof(*mbox));
-
-    adsp->mbox_io = NULL;
-
-    sprintf(mbox_name, "%s-mbox", name);
-    err = qemu_io_register_shm(mbox_name, ADSP_IO_SHM_MBOX,
-        board->mbox_dev.desc.size, (void**)&adsp->mbox_io);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc mbox %d\n", err);
-
-    memory_region_init_io(mbox, NULL, &adsp_mbox_ops, adsp,
-        "mbox.io", board->mbox_dev.desc.size);
-    memory_region_add_subregion(adsp->system_memory,
-        board->mbox_dev.desc.base, mbox);
-    qemu_register_reset(mbox_reset, adsp);
+     mbox_reset(info);
 }

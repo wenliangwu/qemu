@@ -21,60 +21,56 @@
 #include "hw/audio/adsp-host.h"
 #include "hw/adsp/hsw.h"
 
-static const struct adsp_desc hsw_board = {
-    .iram = {.base = ADSP_HSW_HOST_IRAM_BASE, .size = ADSP_HSW_IRAM_SIZE},
-    .dram0 = {.base = ADSP_HSW_HOST_DRAM_BASE, .size = ADSP_HSW_DRAM_SIZE},
-    .pci =  {.base = ADSP_HSW_PCI_BASE, .size = ADSP_PCI_SIZE},
+static struct adsp_mem_desc hsw_mem[] = {
+    {.name = "iram", .base = ADSP_HSW_HOST_IRAM_BASE,
+        .size = ADSP_HSW_IRAM_SIZE},
+    {.name = "dram", .base = ADSP_HSW_HOST_DRAM_BASE,
+        .size = ADSP_HSW_DRAM_SIZE},
+};
 
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
+static struct adsp_reg_space hsw_io[] = {
+    { .name = "pci",
+        .desc = {.base = ADSP_HSW_PCI_BASE, .size = ADSP_PCI_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
         .reg = adsp_hsw_shim_map,
-        .desc = {.base = ADSP_HSW_HOST_SHIM_BASE,
-                .size = ADSP_HSW_SHIM_SIZE},
-    },
-
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
+        .desc = {.base = ADSP_HSW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
         .reg = adsp_host_mbox_map,
-        .desc = {.base = ADSP_HSW_HOST_MAILBOX_BASE,
-                .size = ADSP_MAILBOX_SIZE},
-    },
+        .desc = {.base = ADSP_HSW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
+};
 
-    .pci_dev = {
-        .name = "pci",
-        .desc = {.base = ADSP_HSW_PCI_BASE,
-                .size = ADSP_PCI_SIZE},
-    },
+static const struct adsp_desc hsw_board = {
+    .num_mem = ARRAY_SIZE(hsw_mem),
+    .mem_region = hsw_mem,
+
+    .num_io = ARRAY_SIZE(hsw_io),
+    .io_dev = hsw_io,
+};
+
+static struct adsp_mem_desc bdw_mem[] = {
+    {.name = "iram", .base = ADSP_BDW_HOST_IRAM_BASE,
+        .size = ADSP_BDW_IRAM_SIZE},
+    {.name = "dram", .base = ADSP_BDW_HOST_DRAM_BASE,
+        .size = ADSP_BDW_DRAM_SIZE},
+};
+
+static struct adsp_reg_space bdw_io[] = {
+    { .name = "pci",
+        .desc = {.base = ADSP_BDW_PCI_BASE, .size = ADSP_PCI_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
+        .reg = adsp_hsw_shim_map,
+        .desc = {.base = ADSP_BDW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
+        .reg = adsp_host_mbox_map,
+        .desc = {.base = ADSP_BDW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
 static const struct adsp_desc bdw_board = {
-    .iram = {.base = ADSP_BDW_HOST_IRAM_BASE, .size = ADSP_BDW_IRAM_SIZE},
-    .dram0 = {.base = ADSP_BDW_HOST_DRAM_BASE, .size = ADSP_BDW_DRAM_SIZE},
-    .pci =  {.base = ADSP_BDW_PCI_BASE, .size = ADSP_PCI_SIZE},
+    .num_mem = ARRAY_SIZE(bdw_mem),
+    .mem_region = bdw_mem,
 
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
-        .reg = adsp_hsw_shim_map,
-        .desc = {.base = ADSP_BDW_HOST_SHIM_BASE,
-                .size = ADSP_HSW_SHIM_SIZE},
-    },
-
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
-        .reg = adsp_host_mbox_map,
-        .desc = {.base = ADSP_BDW_HOST_MAILBOX_BASE,
-                .size = ADSP_MAILBOX_SIZE},
-    },
-
-    .pci_dev = {
-        .name = "pci",
-        .desc = {.base = ADSP_BDW_PCI_BASE,
-                .size = ADSP_PCI_SIZE},
-    },
+    .num_io = ARRAY_SIZE(bdw_io),
+    .io_dev = bdw_io,
 };
 
 static void do_irq(struct adsp_host *adsp, struct qemu_io_msg *msg)
@@ -122,52 +118,17 @@ static int hsw_bridge_cb(void *data, struct qemu_io_msg *msg)
     return 0;
 }
 
-static void init_memory(struct adsp_host *adsp, const char *name)
-{
-    MemoryRegion *iram, *dram0;
-    const struct adsp_desc *board = adsp->desc;
-    char shm_name[32];
-    void *ptr;
-    int err;
-
-    /* IRAM -shared via SHM */
-    sprintf(shm_name, "%s-iram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_IRAM,
-        board->iram.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc IRAM SHM %d\n", err);
-    iram = g_malloc(sizeof(*iram));
-    memory_region_init_ram_ptr(iram, NULL, "lpe.iram", board->iram.size, ptr);
-    vmstate_register_ram_global(iram);
-    memory_region_add_subregion(adsp->system_memory,
-        board->iram.base, iram);
-
-    /* DRAM0 - shared via SHM */
-    sprintf(shm_name, "%s-dram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_DRAM,
-        board->dram0.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc DRAM SHM %d\n", err);
-    dram0 = g_malloc(sizeof(*dram0));
-    memory_region_init_ram_ptr(dram0, NULL, "lpe.dram0", board->dram0.size, ptr);
-    vmstate_register_ram_global(dram0);
-    memory_region_add_subregion(adsp->system_memory,
-        board->dram0.base, dram0);
-
-}
-
 void adsp_hsw_host_init(struct adsp_host *adsp, const char *name)
 {
     adsp->desc = &hsw_board;
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
+    adsp->shm_idx = 0;
 
     adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
 
-    init_memory(adsp, name);
-    adsp_hsw_init_pci(adsp);
-    adsp_hsw_init_shim(adsp, name);
-    adsp_host_init_mbox(adsp, name);
+    adsp_create_host_memory_regions(adsp);
+    adsp_create_host_io_devices(adsp, NULL);
 
     /* initialise bridge to x86 host driver */
     qemu_io_register_parent(name, &hsw_bridge_cb, (void*)adsp);
@@ -178,13 +139,12 @@ void adsp_bdw_host_init(struct adsp_host *adsp, const char *name)
     adsp->desc = &bdw_board;
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
+    adsp->shm_idx = 0;
 
     adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
 
-    init_memory(adsp, name);
-    adsp_hsw_init_pci(adsp);
-    adsp_hsw_init_shim(adsp, name);
-    adsp_host_init_mbox(adsp, name);
+    adsp_create_host_memory_regions(adsp);
+    adsp_create_host_io_devices(adsp, NULL);
 
     /* initialise bridge to x86 host driver */
     qemu_io_register_parent(name, &hsw_bridge_cb, (void*)adsp);

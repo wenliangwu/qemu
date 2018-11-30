@@ -173,7 +173,7 @@ static inline void log_read(struct adsp_log *log,
 		if (!reg[i].enable)
 			break;
 
-		log_print(log, "%s.io: read at %x val 0x%8.8lx\n", space->name,
+		log_print(log, "%s.io: read at 0x%x val 0x%8.8lx\n", space->name,
 			(unsigned int)addr, value);
 
 		return;

@@ -28,18 +28,8 @@ struct adsp_xtensa;
 
 struct adsp_dev {
 
-	/* IO - memory space */
-	uint32_t *mbox_io;
-	uint32_t *shim_io;
-	uint32_t *common_io;
-
-	/* memories */
-	void *sram;
-	void *rom;
-	void *uncache;
-	void *imr;
-	void *lp_sram;
-	void *hp_sram;
+    struct adsp_io_info *shim;
+    int shm_idx;
 
 	/* runtime CPU */
 	struct adsp_xtensa *xtensa[ADSP_MAX_CORES];
@@ -61,12 +51,6 @@ struct adsp_dev {
 	QEMUTimer *ext_timer;
 	uint32_t ext_clk_kHz;
 	int64_t ext_timer_start;
-
-	/* GP DMA */
-	struct adsp_gp_dmac *gp_dmac[ADSP_MAX_GP_DMAC];
-
-	/* SSP */
-	struct adsp_ssp *ssp[ADSP_MAX_SSP];
 
 	/* PMC */
 	QemuThread pmc_thread;

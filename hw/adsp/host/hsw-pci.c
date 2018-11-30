@@ -36,28 +36,32 @@ static struct hsw_pci_data pdata = {0, 0, 0};
 static uint64_t hsw_pci_read(void *opaque, hwaddr addr,
         unsigned size)
 {
-    struct adsp_host *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_host *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
 
-    log_read(adsp->log, &adsp->desc->pci_dev,
-        addr, size, adsp->pci_io[addr >> 2]);
+    log_area_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
 
-    return adsp->pci_io[addr >> 2];
+    return info->region[addr >> 2];
 }
 
 static void hsw_pci_write(void *opaque, hwaddr addr,
         uint64_t val, unsigned size)
 {
-    struct adsp_host *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_host *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
 
-    log_write(adsp->log, &adsp->desc->pci_dev,
-            addr, val, size, adsp->pci_io[addr >> 2]);
+    log_area_write(adsp->log, space, addr, val, size,
+                info->region[addr >> 2]);
 
-    adsp->pci_io[addr >> 2] = val;
+    info->region[addr >> 2] = val;
 
     /* TODO: pass on certain writes to DSP as MQ messages e.g. PM */
 }
 
-static const MemoryRegionOps hsw_pci_ops = {
+const MemoryRegionOps hsw_host_pci_ops = {
     .read = hsw_pci_read,
     .write = hsw_pci_write,
     .endianness = DEVICE_NATIVE_ENDIAN,
@@ -220,17 +224,13 @@ void adsp_bdw_pci_realize(PCIDevice *pci_dev, Error **errp)
     adsp_bdw_host_init(adsp, "bdw");
 }
 
-void adsp_hsw_init_pci(struct adsp_host *adsp)
+void adsp_hsw_init_pci(struct adsp_host *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
 {
-    MemoryRegion *pci;
-    const struct adsp_desc *board = adsp->desc;
+   //memory_region_add_subregion(adsp->system_memory,
+     //   board->pci.base, pci);
 
-    /* PCI reg space  - shared via MSQ */
-    pci = g_malloc(sizeof(*pci));
-    adsp->pci_io = g_malloc(board->pci.size);
-    memory_region_init_io(pci, NULL, &hsw_pci_ops, adsp,
-        "pci.io", board->pci.size);
-    memory_region_add_subregion(adsp->system_memory,
-        board->pci.base, pci);
     //qemu_register_reset(pci_reset, adsp);
+    pci_register_bar(&adsp->dev, 0, PCI_BASE_ADDRESS_SPACE_MEMORY,
+        info->space->desc.ptr);
 }

@@ -35,6 +35,10 @@ case $1 in
  CPU="broxton"
  ADSP="adsp_bxt"
   ;;
+*apl)
+ CPU="broxton"
+ ADSP="adsp_bxt"
+ ;;
 *skl)
  CPU="broxton"
  ADSP="adsp_skl"
