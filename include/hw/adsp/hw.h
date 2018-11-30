@@ -31,8 +31,6 @@
 #include "exec/memory.h"
 
 /* Generic constants */
-#define ADSP_MAX_SSP				6
-#define ADSP_MAX_GP_DMAC			3
 #define ADSP_MAX_IO                 32
 #define ADSP_MAILBOX_SIZE			0x00001000
 #define ADSP_MMIO_SIZE				0x00200000
@@ -41,10 +39,16 @@
 struct adsp_dev;
 struct adsp_gp_dmac;
 struct adsp_log;
+struct adsp_reg_space;
+struct adsp_io_info;
 
 struct adsp_mem_desc {
+    const char *name;
 	hwaddr base;
 	size_t size;
+	hwaddr alias;
+	void *ptr;
+	void *default_values;
 };
 
 /* Register descriptor */
@@ -62,14 +66,20 @@ struct adsp_reg_space {
 	int irq;
 	const struct adsp_reg_desc *reg;	/* array of register descriptors */
 	struct adsp_mem_desc desc;
+	void (*init)(struct adsp_dev *adsp, MemoryRegion *parent,
+	    struct adsp_io_info *info);
+	const MemoryRegionOps *ops;
 };
 
 struct adsp_io_info {
     MemoryRegion io;
-    struct adsp_dev *adsp;
+    void *adsp;
     int io_dev;
     uint32_t *region;
+    struct adsp_reg_space *space;
+    void *private;
 };
+
 
 struct adsp_desc {
 	const char *name;	/* machine name */
@@ -80,31 +90,34 @@ struct adsp_desc {
 	int pmc_irq;
 
 	/* memory regions */
-	struct adsp_mem_desc iram;
-	struct adsp_mem_desc dram0;
-        struct adsp_mem_desc lp_sram;
-	struct adsp_mem_desc uncache;
-	struct adsp_mem_desc rom;
-	struct adsp_mem_desc pci;
-	struct adsp_mem_desc imr;
+	int num_mem;
+	struct adsp_mem_desc *mem_region;
+
+	/* optional platform data */
 	uint32_t host_iram_offset;
 	uint32_t host_dram_offset;
 	uint32_t imr_boot_ldr_offset;
 	uint32_t file_offset;
+	uint32_t dram_base;
+	uint32_t iram_base;
+	uint32_t sram_base;
+	uint32_t imr_base;
 
 	/* devices */
-	int num_ssp;
-	int num_dmac;
 	int num_io;
-	struct adsp_reg_space ssp_dev[ADSP_MAX_SSP];
-	struct adsp_reg_space mbox_dev;
-	struct adsp_reg_space shim_dev;
-	struct adsp_reg_space gp_dmac_dev[ADSP_MAX_GP_DMAC];
-	struct adsp_reg_space pci_dev;
-
 	struct adsp_reg_space *io_dev; /* misc device atm */
 };
 
 int adsp_load_modules(struct adsp_dev *adsp, void *fw, size_t size);
+
+struct adsp_dev;
+struct adsp_host;
+
+void adsp_create_memory_regions(struct adsp_dev *adsp);
+void adsp_create_io_devices(struct adsp_dev *adsp, const MemoryRegionOps *ops);
+void adsp_create_host_memory_regions(struct adsp_host *adsp);
+void adsp_create_host_io_devices(struct adsp_host *adsp, const MemoryRegionOps *ops);
+struct adsp_reg_space *adsp_get_io_space(struct adsp_dev *adsp, hwaddr addr);
+struct adsp_mem_desc *adsp_get_mem_space(struct adsp_dev *adsp, hwaddr addr);
 
 #endif

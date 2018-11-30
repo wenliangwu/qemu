@@ -35,67 +35,72 @@
 #include "cavs.h"
 #include "common.h"
 
-static void rearm_ext_timer(struct adsp_dev *adsp)
+static void rearm_ext_timer(struct adsp_dev *adsp,struct adsp_io_info *info)
 {
-    uint32_t wake = adsp->shim_io[SHIM_EXT_TIMER_CNTLL >> 2];
+    uint32_t wake = info->region[SHIM_EXT_TIMER_CNTLL >> 2];
 
-    adsp->shim_io[SHIM_EXT_TIMER_STAT >> 2] =
+    info->region[SHIM_EXT_TIMER_STAT >> 2] =
         (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->ext_timer_start) /
         (1000000 / adsp->ext_clk_kHz);
 
     timer_mod(adsp->ext_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-            muldiv64(wake - adsp->shim_io[SHIM_EXT_TIMER_STAT >> 2],
+            muldiv64(wake - info->region[SHIM_EXT_TIMER_STAT >> 2],
                 1000000, adsp->ext_clk_kHz));
 }
 
 void cavs_ext_timer_cb(void *opaque)
 {
-    struct adsp_dev *adsp = opaque;
-    uint32_t pisr = adsp->shim_io[SHIM_PISR >> 2];
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    uint32_t pisr = info->region[SHIM_PISR >> 2];
 
     pisr |= SHIM_PISR_EXTT;
-    adsp->shim_io[SHIM_PISR >> 2] = pisr;
+    info->region[SHIM_PISR >> 2] = pisr;
     adsp_set_irq(adsp, adsp->desc->ext_timer_irq, 1);
 }
 
 static void shim_reset(void *opaque)
 {
-    struct adsp_dev *adsp = opaque;
-    const struct adsp_desc *board = adsp->desc;
+    struct adsp_io_info *info = opaque;
+    struct adsp_reg_space *space = info->space;
 
-    memset(adsp->shim_io, 0, board->shim_dev.desc.size);
+    memset(info->region, 0, space->desc.size);
 }
 
 /* SHIM IO from ADSP */
 static uint64_t shim_read(void *opaque, hwaddr addr,
         unsigned size)
 {
-    struct adsp_dev *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
 
-    log_read(adsp->log, &adsp->desc->shim_dev, addr, size,
-        adsp->shim_io[addr >> 2]);
+    log_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
 
-    return adsp->shim_io[addr >> 2];
+    return info->region[addr >> 2];
 }
 
 /* SHIM IO from ADSP */
 static void shim_write(void *opaque, hwaddr addr,
         uint64_t val, unsigned size)
 {
-    struct adsp_dev *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
     struct qemu_io_msg_reg32 reg32;
     struct qemu_io_msg_irq irq;
     uint32_t active, isrx;
 
-    log_write(adsp->log, &adsp->desc->shim_dev, addr, val, size,
-        adsp->shim_io[addr >> 2]);
+    log_write(adsp->log, space, addr, val, size,
+        info->region[addr >> 2]);
 
     /* special case registers */
     switch (addr) {
     case SHIM_IPCDL:
 
         /* set value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* reset the CPU and halt if we are dead to ease debugging */
         if ((val & 0xffff0000) == 0xdead0000) {
@@ -112,13 +117,13 @@ static void shim_write(void *opaque, hwaddr addr,
         /* DSP to host IPC command */
 
         /* set value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* set/clear status bit */
-        isrx = adsp->shim_io[SHIM_ISRX >> 2] & ~(SHIM_ISRX_DONE | SHIM_ISRX_BUSY);
+        isrx = info->region[SHIM_ISRX >> 2] & ~(SHIM_ISRX_DONE | SHIM_ISRX_BUSY);
         isrx |= val & SHIM_IPCD_BUSY ? SHIM_ISRX_BUSY : 0;
         isrx |= val & SHIM_IPCD_DONE ? SHIM_ISRX_DONE : 0;
-        adsp->shim_io[SHIM_ISRX >> 2] = isrx;
+        info->region[SHIM_ISRX >> 2] = isrx;
 
         /* do we need to send an IRQ ? */
         if (val & SHIM_IPCD_BUSY) {
@@ -139,13 +144,13 @@ static void shim_write(void *opaque, hwaddr addr,
         /* DSP to host IPC notify */
 
         /* set value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* set/clear status bit */
-        isrx = adsp->shim_io[SHIM_ISRX >> 2] & ~(SHIM_ISRX_DONE | SHIM_ISRX_BUSY);
+        isrx = info->region[SHIM_ISRX >> 2] & ~(SHIM_ISRX_DONE | SHIM_ISRX_BUSY);
         isrx |= val & SHIM_IPCX_BUSY ? SHIM_ISRX_BUSY : 0;
         isrx |= val & SHIM_IPCX_DONE ? SHIM_ISRX_DONE : 0;
-        adsp->shim_io[SHIM_ISRX >> 2] = isrx;
+        info->region[SHIM_ISRX >> 2] = isrx;
 
         /* do we need to send an IRQ ? */
         if (val & SHIM_IPCX_DONE) {
@@ -165,15 +170,15 @@ static void shim_write(void *opaque, hwaddr addr,
     case SHIM_IMRD:
 
         /* set value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* DSP IPC interrupt mask */
-        active = adsp->shim_io[SHIM_ISRD >> 2] & ~(adsp->shim_io[SHIM_IMRD >> 2]);
+        active = info->region[SHIM_ISRD >> 2] & ~(info->region[SHIM_IMRD >> 2]);
 
         log_text(adsp->log, LOG_IRQ_ACTIVE,
             "irq: IMRD masking %x mask %x active %x\n",
-            adsp->shim_io[SHIM_ISRD >> 2],
-            adsp->shim_io[SHIM_IMRD >> 2], active);
+            info->region[SHIM_ISRD >> 2],
+            info->region[SHIM_IMRD >> 2], active);
 
         if (!active) {
             adsp_set_irq(adsp, adsp->desc->ia_irq, 0);
@@ -183,7 +188,7 @@ static void shim_write(void *opaque, hwaddr addr,
     case SHIM_CSR:
 
         /* set value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* now send msg to HOST VM to notify register write */
         reg32.hdr.type = QEMU_IO_TYPE_REG;
@@ -195,31 +200,31 @@ static void shim_write(void *opaque, hwaddr addr,
         break;
     case SHIM_EXT_TIMER_CNTLL:
         /* set the timer timeout value via SHM */
-        adsp->shim_io[addr >> 2] = val;
-        if (adsp->shim_io[SHIM_EXT_TIMER_CNTLH >> 2] & SHIM_EXT_TIMER_RUN)
-            rearm_ext_timer(adsp);
+        info->region[addr >> 2] = val;
+        if (info->region[SHIM_EXT_TIMER_CNTLH >> 2] & SHIM_EXT_TIMER_RUN)
+            rearm_ext_timer(adsp, info);
         break;
     case SHIM_EXT_TIMER_CNTLH:
 
         /* enable the timer ? */
         if (val & SHIM_EXT_TIMER_RUN &&
-            !(adsp->shim_io[addr >> 2] & SHIM_EXT_TIMER_RUN)) {
+            !(info->region[addr >> 2] & SHIM_EXT_TIMER_RUN)) {
                 adsp->ext_timer_start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
-                rearm_ext_timer(adsp);
+                rearm_ext_timer(adsp, info);
         }
 
         /* set value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* set/clear ext timer */
         if (val & SHIM_EXT_TIMER_CLEAR)
-            adsp->shim_io[SHIM_EXT_TIMER_STAT >> 2] = 0;
+            info->region[SHIM_EXT_TIMER_STAT >> 2] = 0;
 
         break;
     case SHIM_EXT_TIMER_STAT:
         /* set status value via SHM - should not be written to ? */
-        adsp->shim_io[addr >> 2] = val;
-        rearm_ext_timer(adsp);
+        info->region[addr >> 2] = val;
+        rearm_ext_timer(adsp, info);
         break;
     default:
         break;
@@ -307,15 +312,16 @@ void adsp_cavs_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 
 void adsp_cavs_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
+    struct adsp_io_info *info = adsp->shim;
     uint32_t active;
 
-    active = adsp->shim_io[SHIM_ISRD >> 2] & ~(adsp->shim_io[SHIM_IMRD >> 2]);
+    active = info->region[SHIM_ISRD >> 2] & ~(info->region[SHIM_IMRD >> 2]);
 
     log_text(adsp->log, LOG_IRQ_ACTIVE,
         "IRQ: from HOST status %x mask %x active %x cmd %x\n",
-        adsp->shim_io[SHIM_ISRD >> 2],
-        adsp->shim_io[SHIM_IMRD >> 2], active,
-        adsp->shim_io[SHIM_IPCX >> 2]);
+        info->region[SHIM_ISRD >> 2],
+        info->region[SHIM_IMRD >> 2], active,
+        info->region[SHIM_IPCX >> 2]);
 
     if (active) {
         qemu_mutex_lock_iothread();
@@ -324,33 +330,15 @@ void adsp_cavs_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
     }
 }
 
-static const MemoryRegionOps shim_ops = {
+const MemoryRegionOps cavs_shim_ops = {
     .read = shim_read,
     .write = shim_write,
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-void adsp_cavs_shim_init(struct adsp_dev *adsp, const char *name)
+void adsp_cavs_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
 {
-    MemoryRegion *shim;
-    const struct adsp_desc *board = adsp->desc;
-    void *ptr = NULL;
-    char shim_name[32];
-    int err;
-
-    /* SHIM  - shared via MSQ */
-    shim = g_malloc(sizeof(*shim));
-
-    sprintf(shim_name, "%s-shim", name);
-    err = qemu_io_register_shm(shim_name, ADSP_IO_SHM_SHIM,
-            board->shim_dev.desc.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc %s SHM %d\n", name, err);
-
-    adsp->shim_io = ptr;
-    memory_region_init_io(shim, NULL, &shim_ops, adsp,
-        "shim.io", board->shim_dev.desc.size);
-    memory_region_add_subregion(adsp->system_memory,
-        board->shim_dev.desc.base, shim);
-    qemu_register_reset(shim_reset, adsp);
+    shim_reset(info);
+    adsp->shim = info;
 }

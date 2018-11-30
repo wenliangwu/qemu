@@ -22,32 +22,30 @@
 #include "hw/adsp/byt.h"
 #include "hw/adsp/log.h"
 
-static const struct adsp_desc byt_board = {
-    .iram = {.base = ADSP_BYT_HOST_IRAM_BASE, .size = ADSP_BYT_IRAM_SIZE},
-    .dram0 = {.base = ADSP_BYT_HOST_DRAM_BASE, .size = ADSP_BYT_DRAM_SIZE},
-    .pci =  {.base = ADSP_BYT_PCI_BASE, .size = ADSP_PCI_SIZE},
+static struct adsp_mem_desc byt_mem[] = {
+    {.name = "iram", .base = ADSP_BYT_HOST_IRAM_BASE,
+        .size = ADSP_BYT_IRAM_SIZE},
+    {.name = "dram", .base = ADSP_BYT_HOST_DRAM_BASE,
+        .size = ADSP_BYT_DRAM_SIZE},
+};
 
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
+static struct adsp_reg_space byt_io[] = {
+    { .name = "pci",
+        .desc = {.base = ADSP_BYT_PCI_BASE, .size = ADSP_PCI_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
         .reg = adsp_byt_shim_map,
-        .desc = {.base = ADSP_BYT_HOST_SHIM_BASE,
-                .size = ADSP_BYT_SHIM_SIZE},
-    },
-
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
+        .desc = {.base = ADSP_BYT_DSP_SHIM_BASE, .size = ADSP_BYT_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
         .reg = adsp_host_mbox_map,
-        .desc = {.base = ADSP_BYT_HOST_MAILBOX_BASE,
-                .size = ADSP_MAILBOX_SIZE},
-    },
+        .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
+};
 
-    .pci_dev = {
-        .name = "pci",
-        .desc = {.base = ADSP_BYT_PCI_BASE,
-                .size = ADSP_PCI_SIZE},
-    },
+static const struct adsp_desc byt_board = {
+    .num_mem = ARRAY_SIZE(byt_mem),
+    .mem_region = byt_mem,
+
+    .num_io = ARRAY_SIZE(byt_io),
+    .io_dev = byt_io,
 };
 
 static void do_irq(struct adsp_host *adsp, struct qemu_io_msg *msg)
@@ -99,40 +97,6 @@ static int byt_bridge_cb(void *data, struct qemu_io_msg *msg)
     return 0;
 }
 
-static void init_memory(struct adsp_host *adsp, const char *name)
-{
-    MemoryRegion *iram, *dram0;
-    const struct adsp_desc *board = adsp->desc;
-    char shm_name[32];
-    void *ptr;
-    int err;
-
-    /* IRAM -shared via SHM */
-    sprintf(shm_name, "%s-iram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_IRAM,
-        board->iram.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc IRAM SHM %d\n", err);
-    iram = g_malloc(sizeof(*iram));
-    memory_region_init_ram_ptr(iram, NULL, "lpe.iram", board->iram.size, ptr);
-    vmstate_register_ram_global(iram);
-    memory_region_add_subregion(adsp->system_memory,
-        board->iram.base, iram);
-
-    /* DRAM0 - shared via SHM */
-    sprintf(shm_name, "%s-dram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_DRAM,
-        board->dram0.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc DRAM SHM %d\n", err);
-    dram0 = g_malloc(sizeof(*dram0));
-    memory_region_init_ram_ptr(dram0, NULL, "lpe.dram0", board->dram0.size, ptr);
-    vmstate_register_ram_global(dram0);
-    memory_region_add_subregion(adsp->system_memory,
-        board->dram0.base, dram0);
-
-}
-
 void adsp_byt_host_init(struct adsp_host *adsp, const char *name)
 {
     adsp->desc = &byt_board;
@@ -140,11 +104,10 @@ void adsp_byt_host_init(struct adsp_host *adsp, const char *name)
     adsp->machine_opts = qemu_get_machine_opts();
 
     adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    adsp->shm_idx = 0;
 
-    init_memory(adsp, name);
-    adsp_byt_init_pci(adsp);
-    adsp_byt_init_shim(adsp, name);
-    adsp_host_init_mbox(adsp, name);
+    adsp_create_host_memory_regions(adsp);
+    adsp_create_host_io_devices(adsp, NULL);
 
     /* initialise bridge to x86 host driver */
     qemu_io_register_parent(name, &byt_bridge_cb, (void*)adsp);

@@ -47,50 +47,6 @@ static void adsp_reset(void *opaque)
 
 }
 
-static void init_memory(struct adsp_dev *adsp, const char *name)
-{
-    MemoryRegion *iram, *dram0;
-    const struct adsp_desc *board = adsp->desc;
-    void *ptr = NULL;
-    char shm_name[32];
-    int err, i;
-    uint32_t *uptr;
-
-    /* IRAM -shared via SHM */
-    sprintf(shm_name, "%s-iram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_IRAM,
-        board->iram.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc IRAM SHM %d\n", err);
-    iram = g_malloc(sizeof(*iram));
-    memory_region_init_ram_ptr(iram, NULL, "lpe.iram", board->iram.size, ptr);
-    vmstate_register_ram_global(iram);
-    memory_region_add_subregion(adsp->system_memory,
-        board->iram.base, iram);
-
-    /* set memory to non zero values */
-    uptr = ptr;
-    for (i = 0; i < board->iram.size >> 2; i++)
-        uptr[i] = 0x5a5a5a5a;
-
-    /* DRAM0 - shared via SHM */
-    sprintf(shm_name, "%s-dram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_DRAM,
-        board->dram0.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc DRAM SHM %d\n", err);
-    dram0 = g_malloc(sizeof(*dram0));
-    memory_region_init_ram_ptr(dram0, NULL, "lpe.dram0", board->dram0.size, ptr);
-    vmstate_register_ram_global(dram0);
-    memory_region_add_subregion(adsp->system_memory,
-        board->dram0.base, dram0);
-
-    /* set memory to non zero values */
-    uptr = ptr;
-    for (i = 0; i < board->dram0.size >> 2; i++)
-        uptr[i] = 0x6b6b6b6b;
-}
-
 static void adsp_pm_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
 }
@@ -136,6 +92,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     adsp = g_malloc(sizeof(*adsp));
     adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
     adsp->desc = board;
+    adsp->shm_idx = 0;
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
     adsp->cpu_model = machine->cpu_model;
@@ -167,13 +124,8 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
         cpu_reset(CPU(adsp->xtensa[n]->cpu));
     }
 
-    init_memory(adsp, name);
-
-    /* init peripherals */
-    adsp_byt_shim_init(adsp, name);
-    adsp_mbox_init(adsp, name);
-    dw_dma_init_dev(adsp, adsp->system_memory, board->gp_dmac_dev, board->num_dmac);
-    adsp_ssp_init(adsp->system_memory, board->ssp_dev, board->num_ssp);
+    adsp_create_memory_regions(adsp);
+    adsp_create_io_devices(adsp, NULL);
 
     /* reset all devices to init state */
     qemu_devices_reset();
@@ -189,14 +141,45 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     }
 
     /* load the binary image and copy to IRAM */
-    ldata = g_malloc(board->iram.size + board->dram0.size);
+    ldata = g_malloc(ADSP_BYT_IRAM_SIZE + ADSP_BYT_DRAM_SIZE);
     lsize = load_image_size(adsp->kernel_filename, ldata,
-         board->iram.size + board->dram0.size);
+         ADSP_BYT_IRAM_SIZE + ADSP_BYT_DRAM_SIZE);
 
     adsp_load_modules(adsp, ldata, lsize);
 
     return adsp;
 }
+
+static struct adsp_mem_desc byt_mem[] = {
+    {.name = "iram", .base = ADSP_BYT_DSP_IRAM_BASE,
+        .size = ADSP_BYT_IRAM_SIZE},
+    {.name = "dram", .base = ADSP_BYT_DSP_DRAM_BASE,
+        .size = ADSP_BYT_DRAM_SIZE},
+};
+
+static struct adsp_reg_space byt_io[] = {
+    { .name = "dmac0", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC0,
+        .desc = {.base = ADSP_BYT_DMA0_BASE, .size = ADSP_BYT_DMA0_SIZE},},
+    { .name = "dmac1", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC1,
+        .desc = {.base = ADSP_BYT_DMA1_BASE, .size = ADSP_BYT_DMA1_SIZE},},
+    { .name = "ssp0", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP0,
+        .desc = {.base = ADSP_BYT_SSP0_BASE, .size = ADSP_BYT_SSP0_SIZE},},
+    { .name = "ssp1", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP1,
+        .desc = {.base = ADSP_BYT_SSP1_BASE, .size = ADSP_BYT_SSP1_SIZE},},
+    { .name = "ssp2", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP2,
+        .desc = {.base = ADSP_BYT_SSP2_BASE, .size = ADSP_BYT_SSP2_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
+        .reg = adsp_byt_shim_map,
+        .desc = {.base = ADSP_BYT_DSP_SHIM_BASE, .size = ADSP_BYT_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
+        .reg = adsp_mbox_map,
+        .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
+};
 
 /* hardware memory map */
 static const struct adsp_desc byt_dsp_desc = {
@@ -204,67 +187,50 @@ static const struct adsp_desc byt_dsp_desc = {
     .ext_timer_irq = IRQ_NUM_EXT_TIMER,
     .pmc_irq = IRQ_NUM_EXT_PMC,
 
-    .num_ssp = 3,
-    .num_dmac = 2,
-    .iram = {.base = ADSP_BYT_DSP_IRAM_BASE, .size = ADSP_BYT_IRAM_SIZE},
-    .dram0 = {.base = ADSP_BYT_DSP_DRAM_BASE, .size = ADSP_BYT_DRAM_SIZE},
     .host_iram_offset = ADSP_BYT_HOST_IRAM_OFFSET,
     .host_dram_offset = ADSP_BYT_HOST_DRAM_OFFSET,
 
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
-        .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE,
-                 .size = ADSP_MAILBOX_SIZE},
-    },
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
+    .num_mem = ARRAY_SIZE(byt_mem),
+    .mem_region = byt_mem,
+
+    .num_io = ARRAY_SIZE(byt_io),
+    .io_dev = byt_io,
+
+   .iram_base = ADSP_BYT_DSP_IRAM_BASE,
+   .dram_base = ADSP_BYT_DSP_DRAM_BASE,
+};
+
+static struct adsp_reg_space cht_io[] = {
+    { .name = "dmac0", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC0,
+        .desc = {.base = ADSP_BYT_DMA0_BASE, .size = ADSP_BYT_DMA0_SIZE},},
+    { .name = "dmac1", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC1,
+        .desc = {.base = ADSP_BYT_DMA1_BASE, .size = ADSP_BYT_DMA1_SIZE},},
+    { .name = "ssp0", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP0,
+        .desc = {.base = ADSP_BYT_SSP0_BASE, .size = ADSP_BYT_SSP0_SIZE},},
+    { .name = "ssp1", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP1,
+        .desc = {.base = ADSP_BYT_SSP1_BASE, .size = ADSP_BYT_SSP1_SIZE},},
+    { .name = "ssp2", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP2,
+        .desc = {.base = ADSP_BYT_SSP2_BASE, .size = ADSP_BYT_SSP2_SIZE},},
+    { .name = "ssp3", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP0,
+        .desc = {.base = ADSP_BYT_SSP3_BASE, .size = ADSP_BYT_SSP3_SIZE},},
+    { .name = "ssp4", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP1,
+        .desc = {.base = ADSP_BYT_SSP4_BASE, .size = ADSP_BYT_SSP4_SIZE},},
+    { .name = "ssp5", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP2,
+        .desc = {.base = ADSP_BYT_SSP5_BASE, .size = ADSP_BYT_SSP5_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
         .reg = adsp_byt_shim_map,
-        .desc = {.base = ADSP_BYT_DSP_SHIM_BASE,
-                .size = ADSP_BYT_SHIM_SIZE},
-    },
-    .gp_dmac_dev[0] = {
-        .name = "dmac0",
-        .irq = IRQ_NUM_EXT_DMAC0,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BYT_DMA0_BASE,
-                .size = ADSP_BYT_DMA0_SIZE},
-    },
-    .gp_dmac_dev[1] = {
-        .name = "dmac1",
-        .irq = IRQ_NUM_EXT_DMAC1,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BYT_DMA1_BASE,
-                .size = ADSP_BYT_DMA1_SIZE},
-    },
-    .ssp_dev[0] = {
-        .name = "ssp0",
-        .irq = IRQ_NUM_EXT_SSP0,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP0_BASE,
-                .size = ADSP_BYT_SSP0_SIZE},
-    },
-    .ssp_dev[1] = {
-        .name = "ssp1",
-        .irq = IRQ_NUM_EXT_SSP1,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP1_BASE,
-                .size = ADSP_BYT_SSP1_SIZE},
-    },
-    .ssp_dev[2] = {
-        .name = "ssp2",
-        .irq = IRQ_NUM_EXT_SSP2,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP2_BASE,
-                .size = ADSP_BYT_SSP2_SIZE},
-    },
+        .desc = {.base = ADSP_BYT_DSP_SHIM_BASE, .size = ADSP_BYT_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
+        .reg = adsp_mbox_map,
+        .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
 /* hardware memory map */
@@ -273,99 +239,14 @@ static const struct adsp_desc cht_dsp_desc = {
     .ext_timer_irq = IRQ_NUM_EXT_TIMER,
     .pmc_irq = IRQ_NUM_EXT_PMC,
 
-    .num_ssp = 6,
-    .num_dmac = 3,
-    .iram = {.base = ADSP_BYT_DSP_IRAM_BASE, .size = ADSP_BYT_IRAM_SIZE},
-    .dram0 = {.base = ADSP_BYT_DSP_DRAM_BASE, .size = ADSP_BYT_DRAM_SIZE},
-    .host_iram_offset = ADSP_BYT_HOST_IRAM_OFFSET,
-    .host_dram_offset = ADSP_BYT_HOST_DRAM_OFFSET,
+    .num_mem = ARRAY_SIZE(byt_mem),
+    .mem_region = byt_mem,
 
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
-        .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE,
-                 .size = ADSP_MAILBOX_SIZE},
-    },
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
-        .reg = adsp_byt_shim_map,
-        .desc = {.base = ADSP_BYT_DSP_SHIM_BASE,
-                .size = ADSP_BYT_SHIM_SIZE},
-    },
-    .gp_dmac_dev[0] = {
-        .name = "dmac0",
-        .irq = IRQ_NUM_EXT_DMAC0,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BYT_DMA0_BASE,
-                .size = ADSP_BYT_DMA0_SIZE},
-    },
-    .gp_dmac_dev[1] = {
-        .name = "dmac1",
-        .irq = IRQ_NUM_EXT_DMAC1,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BYT_DMA1_BASE,
-                .size = ADSP_BYT_DMA1_SIZE},
-    },
-    .gp_dmac_dev[2] = {
-        .name = "dmac2",
-        .irq = IRQ_NUM_EXT_DMAC2,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BYT_DMA2_BASE,
-                .size = ADSP_BYT_DMA2_SIZE},
-    },
-    .ssp_dev[0] = {
-        .name = "ssp0",
-        .irq = IRQ_NUM_EXT_SSP0,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP0_BASE,
-                .size = ADSP_BYT_SSP0_SIZE},
-    },
-    .ssp_dev[1] = {
-        .name = "ssp1",
-        .irq = IRQ_NUM_EXT_SSP1,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP1_BASE,
-                .size = ADSP_BYT_SSP1_SIZE},
-    },
-    .ssp_dev[2] = {
-        .name = "ssp2",
-        .irq = IRQ_NUM_EXT_SSP2,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP2_BASE,
-                .size = ADSP_BYT_SSP2_SIZE},
-    },
-   .ssp_dev[3] = {
-        .name = "ssp3",
-        .irq = IRQ_NUM_EXT_SSP0,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP3_BASE,
-                .size = ADSP_BYT_SSP3_SIZE},
-    },
-    .ssp_dev[4] = {
-        .name = "ssp4",
-        .irq = IRQ_NUM_EXT_SSP1,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP4_BASE,
-                .size = ADSP_BYT_SSP4_SIZE},
-    },
-    .ssp_dev[5] = {
-        .name = "ssp5",
-        .irq = IRQ_NUM_EXT_SSP2,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BYT_SSP5_BASE,
-                .size = ADSP_BYT_SSP5_SIZE},
-    },
+    .num_io = ARRAY_SIZE(cht_io),
+    .io_dev = cht_io,
+
+   .iram_base = ADSP_BYT_DSP_IRAM_BASE,
+   .dram_base = ADSP_BYT_DSP_DRAM_BASE,
 };
 
 static void byt_adsp_init(MachineState *machine)
@@ -373,7 +254,7 @@ static void byt_adsp_init(MachineState *machine)
     struct adsp_dev *adsp;
 
     adsp = adsp_init(&byt_dsp_desc, machine, "byt");
-
+// TODO shim init.
     adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &byt_ext_timer_cb, adsp);
     adsp->ext_clk_kHz = 2500;
 }

@@ -1,2 +1,3 @@
 obj-$(CONFIG_ADSP_HOST) += host/
 obj-$(CONFIG_ADSP_DSP) += dsp/
+obj-y += common.o

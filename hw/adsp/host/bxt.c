@@ -21,33 +21,30 @@
 #include "hw/audio/adsp-host.h"
 #include "hw/adsp/cavs.h"
 
-/* hardware memory map */
-static const struct adsp_desc bxt_board = {
-    .iram = {.base = 0xFE4c0000, .size = ADSP_CAVS_1_5_DSP_SRAM_SIZE},
-    .dram0 = {.base = 0xFE500000, .size = ADSP_CAVS_1_5_DSP_HP_SRAM_SIZE},
-    .pci =  {.base = 0xFE830000, .size = 0x1000},
+static struct adsp_mem_desc bxt_mem[] = {
+    {.name = "iram", .base = 0xFE4c0000,
+        .size = ADSP_CAVS_1_5_DSP_SRAM_SIZE},
+    {.name = "dram", .base = 0xFE500000,
+        .size = ADSP_CAVS_1_5_DSP_HP_SRAM_SIZE},
+};
 
-    /* TODO add HDA base */
-
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_byt_shim_map),
-        .reg = adsp_byt_shim_map,
-        .desc = {.base = 0xFE540000, .size = 0x4000},
-    },
-
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
+static struct adsp_reg_space bxt_io[] = {
+    { .name = "pci",
+        .desc = {.base = 0xFE830000, .size = ADSP_PCI_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
+        .reg = adsp_hsw_shim_map,
+        .desc = {.base = 0xFE540000, .size = 0x4000},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
         .reg = adsp_host_mbox_map,
-        .desc = {.base = 0xFE544000, .size = ADSP_CAVS_DSP_MAILBOX_SIZE},
-    },
+        .desc = {.base = 0xFE544000, .size = ADSP_CAVS_DSP_MAILBOX_SIZE},},
+};
 
-   .pci_dev = {
-        .name = "pci",
-        .desc = {.base = 0xFE830000,
-                .size = ADSP_PCI_SIZE},
-    },
+static const struct adsp_desc bxt_board = {
+    .num_mem = ARRAY_SIZE(bxt_mem),
+    .mem_region = bxt_mem,
+
+    .num_io = ARRAY_SIZE(bxt_io),
+    .io_dev = bxt_io,
 };
 
 static void do_irq(struct adsp_host *adsp, struct qemu_io_msg *msg)
@@ -95,50 +92,17 @@ static int bxt_bridge_cb(void *data, struct qemu_io_msg *msg)
     return 0;
 }
 
-static void init_memory(struct adsp_host *adsp, const char *name)
-{
-    MemoryRegion *iram, *dram0;
-    const struct adsp_desc *board = adsp->desc;
-    char shm_name[32];
-    void *ptr;
-    int err;
-
-    /* IRAM -shared via SHM */
-    sprintf(shm_name, "%s-iram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_IRAM,
-        board->iram.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc IRAM SHM %d\n", err);
-    iram = g_malloc(sizeof(*iram));
-    memory_region_init_ram_ptr(iram, NULL, "lpe.iram", board->iram.size, ptr);
-    vmstate_register_ram_global(iram);
-    memory_region_add_subregion(adsp->system_memory,
-        board->iram.base, iram);
-
-    /* DRAM0 - shared via SHM */
-    sprintf(shm_name, "%s-dram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_DRAM,
-        board->dram0.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc DRAM SHM %d\n", err);
-    dram0 = g_malloc(sizeof(*dram0));
-    memory_region_init_ram_ptr(dram0, NULL, "lpe.dram0", board->dram0.size, ptr);
-    vmstate_register_ram_global(dram0);
-    memory_region_add_subregion(adsp->system_memory,
-        board->dram0.base, dram0);
-
-}
-
 void adsp_bxt_host_init(struct adsp_host *adsp, const char *name)
 {
     adsp->desc = &bxt_board;
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
+    adsp->shm_idx = 0;
+
     adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
-    init_memory(adsp, name);
-    adsp_bxt_init_pci(adsp);
-    adsp_bxt_init_shim(adsp, name);
-    adsp_host_init_mbox(adsp, name);
+
+    adsp_create_host_memory_regions(adsp);
+    adsp_create_host_io_devices(adsp, NULL);
 
     /* initialise bridge to x86 host driver */
     qemu_io_register_parent(name, &bxt_bridge_cb, (void*)adsp);

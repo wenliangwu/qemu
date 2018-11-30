@@ -26,16 +26,18 @@
 static uint64_t adsp_shim_read(void *opaque, hwaddr addr,
         unsigned size)
 {
-    struct adsp_host *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_host *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
 
-    log_read(adsp->log, &adsp->desc->shim_dev,
-                addr, size, adsp->shim_io[addr >> 2]);
+    log_area_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
 
     switch (size) {
     case 4:
-        return adsp->shim_io[addr >> 2];
+        return info->region[addr >> 2];
     case 8:
-        return ((uint64_t*)adsp->shim_io)[addr >> 3];
+        return *((uint64_t*)&info->region[addr >> 3]);
     default:
         printf("shim.io invalid read size %d at 0x%8.8x\n",
             size, (unsigned int)addr);
@@ -47,26 +49,28 @@ static uint64_t adsp_shim_read(void *opaque, hwaddr addr,
 static void adsp_shim_write(void *opaque, hwaddr addr,
         uint64_t val, unsigned size)
 {
-    struct adsp_host *adsp = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_host *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
     struct qemu_io_msg_reg32 reg32;
     struct qemu_io_msg_irq irq;
     uint32_t active, isrd;
 
-    log_write(adsp->log, &adsp->desc->shim_dev,
-                    addr, val, size, adsp->shim_io[addr >> 2]);
+    log_area_write(adsp->log, space, addr, val, size,
+                info->region[addr >> 2]);
 
     /* write value via SHM */
-    adsp->shim_io[addr >> 2] = val;
+    info->region[addr >> 2] = val;
 
     /* most IO is handled by SHM, but there are some exceptions */
     switch (addr) {
     case SHIM_IPCXH:
 
         /* now set/clear status bit */
-        isrd = adsp->shim_io[SHIM_ISRD >> 2] & ~(SHIM_ISRD_DONE | SHIM_ISRD_BUSY);
+        isrd = info->region[SHIM_ISRD >> 2] & ~(SHIM_ISRD_DONE | SHIM_ISRD_BUSY);
         isrd |= val & SHIM_IPCX_BUSY ? SHIM_ISRD_BUSY : 0;
         isrd |= val & SHIM_IPCX_DONE ? SHIM_ISRD_DONE : 0;
-        adsp->shim_io[SHIM_ISRD >> 2] = isrd;
+        info->region[SHIM_ISRD >> 2] = isrd;
 
         /* do we need to send an IRQ ? */
         if (val & SHIM_IPCX_BUSY) {
@@ -86,11 +90,11 @@ static void adsp_shim_write(void *opaque, hwaddr addr,
     case SHIM_IPCDH:
 
         /* set/clear status bit */
-        isrd = adsp->shim_io[SHIM_ISRD >> 2] &
+        isrd = info->region[SHIM_ISRD >> 2] &
             ~(SHIM_ISRD_DONE | SHIM_ISRD_BUSY);
         isrd |= val & SHIM_IPCD_BUSY ? SHIM_ISRD_BUSY : 0;
         isrd |= val & SHIM_IPCD_DONE ? SHIM_ISRD_DONE : 0;
-        adsp->shim_io[SHIM_ISRD >> 2] = isrd;
+        info->region[SHIM_ISRD >> 2] = isrd;
 
         /* do we need to send an IRQ ? */
         if (val & SHIM_IPCD_DONE) {
@@ -109,15 +113,15 @@ static void adsp_shim_write(void *opaque, hwaddr addr,
         break;
     case SHIM_IMRX:
         /* write value via SHM */
-        adsp->shim_io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
-        active = adsp->shim_io[SHIM_ISRX >> 2] &
-            ~(adsp->shim_io[SHIM_IMRX >> 2]);
+        active = info->region[SHIM_ISRX >> 2] &
+            ~(info->region[SHIM_IMRX >> 2]);
 
         log_text(adsp->log, LOG_IRQ_ACTIVE,
             "irq: masking %x mask %x active %x\n",
-            adsp->shim_io[SHIM_ISRD >> 2],
-            adsp->shim_io[SHIM_IMRD >> 2], active);
+            info->region[SHIM_ISRD >> 2],
+            info->region[SHIM_IMRD >> 2], active);
 
         if (!active) {
             pci_set_irq(&adsp->dev, 0);
@@ -137,32 +141,14 @@ static void adsp_shim_write(void *opaque, hwaddr addr,
     }
 }
 
-static const MemoryRegionOps adsp_shim_ops = {
+const MemoryRegionOps adsp_byt_host_shim_ops = {
     .read = adsp_shim_read,
     .write = adsp_shim_write,
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-void adsp_byt_init_shim(struct adsp_host *adsp, const char *name)
+void adsp_byt_init_shim(struct adsp_host *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
 {
-    MemoryRegion *shim;
-    void *ptr = NULL;
-    char shim_name[32];
-    const struct adsp_desc *board = adsp->desc;
-    int err;
-
-    /* shim reg space  - shared via MSQ */
-    shim = g_malloc(sizeof(*shim));
-
-    sprintf(shim_name, "%s-shim", name);
-    err = qemu_io_register_shm(shim_name, ADSP_IO_SHM_SHIM,
-        board->shim_dev.desc.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc SHIM SHM %d\n", err);
-
-    adsp->shim_io = ptr;
-    memory_region_init_io(shim, NULL, &adsp_shim_ops, adsp,
-        "shim.io", board->shim_dev.desc.size);
-    memory_region_add_subregion(adsp->system_memory,
-        board->shim_dev.desc.base, shim);
+    adsp->shim_io = info->region;
 }

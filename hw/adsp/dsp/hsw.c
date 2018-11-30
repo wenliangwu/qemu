@@ -47,50 +47,6 @@ static void adsp_reset(void *opaque)
 
 }
 
-static void init_memory(struct adsp_dev *adsp, const char *name)
-{
-    MemoryRegion *iram, *dram0;
-    const struct adsp_desc *board = adsp->desc;
-    char shm_name[32];
-    void *ptr = NULL;
-    int err, i;
-    uint32_t *uptr;
-
-    /* IRAM -shared via SHM */
-    sprintf(shm_name, "%s-iram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_IRAM,
-        board->iram.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc IRAM SHM %d\n", err);
-    iram = g_malloc(sizeof(*iram));
-    memory_region_init_ram_ptr(iram, NULL, "lpe.iram", board->iram.size, ptr);
-    vmstate_register_ram_global(iram);
-    memory_region_add_subregion(adsp->system_memory,
-        board->iram.base, iram);
-
-    /* set memory to non zero values */
-    uptr = ptr;
-    for (i = 0; i < board->iram.size >> 2; i++)
-        uptr[i] = 0x5a5a5a5a;
-
-    /* DRAM0 - shared via SHM */
-    sprintf(shm_name, "%s-dram", name);
-    err = qemu_io_register_shm(shm_name, ADSP_IO_SHM_DRAM,
-        board->dram0.size, &ptr);
-    if (err < 0)
-        fprintf(stderr, "error: cant alloc DRAM SHM %d\n", err);
-    dram0 = g_malloc(sizeof(*dram0));
-    memory_region_init_ram_ptr(dram0, NULL, "lpe.dram0", board->dram0.size, ptr);
-    vmstate_register_ram_global(dram0);
-    memory_region_add_subregion(adsp->system_memory,
-        board->dram0.base, dram0);
-
-    /* set memory to non zero values */
-    uptr = ptr;
-    for (i = 0; i < board->dram0.size >> 2; i++)
-        uptr[i] = 0x6b6b6b6b;
-}
-
 static void adsp_pm_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
 }
@@ -132,6 +88,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     adsp = g_malloc(sizeof(*adsp));
     adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
     adsp->desc = board;
+    adsp->shm_idx = 0;
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
     adsp->cpu_model = machine->cpu_model;
@@ -162,13 +119,9 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
         cpu_reset(CPU(adsp->xtensa[n]->cpu));
     }
 
-    init_memory(adsp, name);
+    adsp_create_memory_regions(adsp);
+    adsp_create_io_devices(adsp, NULL);
 
-    /* init peripherals */
-    adsp_bdw_shim_init(adsp, name);
-    adsp_mbox_init(adsp, name);
-    dw_dma_init_dev(adsp, adsp->system_memory, board->gp_dmac_dev, board->num_dmac);
-    adsp_ssp_init(adsp->system_memory, board->ssp_dev, board->num_ssp);
 
     /* reset all devices to init state */
     qemu_devices_reset();
@@ -185,14 +138,42 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     }
 
     /* load the binary image and copy to IRAM */
-    ldata = g_malloc(board->iram.size + board->dram0.size);
+    ldata = g_malloc(ADSP_BDW_DSP_IRAM_BASE + ADSP_BDW_DSP_DRAM_BASE);
     lsize = load_image_size(adsp->kernel_filename, ldata,
-        board->iram.size + board->dram0.size);
+        ADSP_BDW_DSP_IRAM_BASE + ADSP_BDW_DSP_DRAM_BASE);
 
     adsp_load_modules(adsp, ldata, lsize);
 
     return adsp;
 }
+
+static struct adsp_mem_desc hsw_mem[] = {
+    {.name = "iram", .base = ADSP_HSW_DSP_IRAM_BASE,
+        .size = ADSP_HSW_IRAM_SIZE},
+    {.name = "dram", .base = ADSP_HSW_DSP_DRAM_BASE,
+        .size = ADSP_HSW_DRAM_SIZE},
+};
+
+static struct adsp_reg_space hsw_io[] = {
+    { .name = "dmac0", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC0,
+        .desc = {.base = ADSP_HSW_DMA0_BASE, .size = ADSP_HSW_DMA0_SIZE},},
+    { .name = "dmac1", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC1,
+        .desc = {.base = ADSP_HSW_DMA1_BASE, .size = ADSP_HSW_DMA1_SIZE},},
+    { .name = "ssp0", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP0,
+        .desc = {.base = ADSP_HSW_SSP0_BASE, .size = ADSP_HSW_SSP0_SIZE},},
+    { .name = "ssp1", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP1,
+        .desc = {.base = ADSP_HSW_SSP1_BASE, .size = ADSP_HSW_SSP1_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
+        .reg = adsp_hsw_shim_map,
+        .desc = {.base = ADSP_HSW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
+        .reg = adsp_mbox_map,
+        .desc = {.base = ADSP_HSW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
+};
 
 /* hardware memory map - TODO: update MBOX from BDW */
 static const struct adsp_desc hsw_dsp_desc = {
@@ -200,50 +181,43 @@ static const struct adsp_desc hsw_dsp_desc = {
     .ia_irq = 4,
     .host_iram_offset = ADSP_HSW_HOST_IRAM_OFFSET,
     .host_dram_offset = ADSP_HSW_HOST_DRAM_OFFSET,
-    .iram = {.base = ADSP_HSW_DSP_IRAM_BASE, .size = ADSP_HSW_IRAM_SIZE},
-    .dram0 = {.base = ADSP_HSW_DSP_DRAM_BASE, .size = ADSP_HSW_DRAM_SIZE},
-    .num_dmac = 2,
-    .num_ssp = 2,
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
-        .desc = {.base = ADSP_HSW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},
-    },
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
+
+    .num_mem = ARRAY_SIZE(hsw_mem),
+    .mem_region = hsw_mem,
+
+    .num_io = ARRAY_SIZE(hsw_io),
+    .io_dev = hsw_io,
+
+    .iram_base = ADSP_HSW_DSP_IRAM_BASE,
+    .dram_base = ADSP_HSW_DSP_DRAM_BASE,
+};
+
+static struct adsp_mem_desc bdw_mem[] = {
+    {.name = "iram", .base = ADSP_BDW_DSP_IRAM_BASE,
+        .size = ADSP_BDW_IRAM_SIZE},
+    {.name = "dram", .base = ADSP_BDW_DSP_DRAM_BASE,
+        .size = ADSP_BDW_DRAM_SIZE},
+};
+
+static struct adsp_reg_space bdw_io[] = {
+    { .name = "dmac0", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC0,
+        .desc = {.base = ADSP_BDW_DMA0_BASE, .size = ADSP_HSW_DMA0_SIZE},},
+    { .name = "dmac1", .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
+        .reg = adsp_gp_dma_map, .irq = IRQ_NUM_EXT_DMAC1,
+        .desc = {.base = ADSP_BDW_DMA1_BASE, .size = ADSP_HSW_DMA1_SIZE},},
+    { .name = "ssp0", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP0,
+        .desc = {.base = ADSP_BDW_SSP0_BASE, .size = ADSP_HSW_SSP0_SIZE},},
+    { .name = "ssp1", .reg_count = ARRAY_SIZE(adsp_ssp_map),
+        .reg = adsp_ssp_map, .irq = IRQ_NUM_EXT_SSP1,
+        .desc = {.base = ADSP_BDW_SSP1_BASE, .size = ADSP_HSW_SSP1_SIZE},},
+    { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
         .reg = adsp_hsw_shim_map,
-        .desc = {.base = ADSP_HSW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},
-    },
-    .gp_dmac_dev[0] = {
-        .name = "dmac0",
-        .irq = IRQ_NUM_EXT_DMAC0,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_HSW_DMA0_BASE, .size = ADSP_HSW_DMA0_SIZE},
-    },
-    .gp_dmac_dev[1] = {
-        .name = "dmac1",
-        .irq = IRQ_NUM_EXT_DMAC1,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_HSW_DMA1_BASE, .size = ADSP_HSW_DMA1_SIZE},
-    },
-    .ssp_dev[0] = {
-        .name = "ssp0",
-        .irq = IRQ_NUM_EXT_SSP0,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_HSW_SSP0_BASE, .size = ADSP_HSW_SSP0_SIZE},
-    },
-    .ssp_dev[1] = {
-        .name = "ssp1",
-        .irq = IRQ_NUM_EXT_SSP1,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_HSW_SSP1_BASE, .size = ADSP_HSW_SSP1_SIZE},
-    },
+        .desc = {.base = ADSP_BDW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},},
+    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
+        .reg = adsp_mbox_map,
+        .desc = {.base = ADSP_BDW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
 /* hardware memory map - TODO: update MBOX from BDW */
@@ -252,50 +226,15 @@ static const struct adsp_desc bdw_dsp_desc = {
     .ia_irq = 4,
     .host_iram_offset = ADSP_BDW_HOST_IRAM_OFFSET,
     .host_dram_offset = ADSP_BDW_HOST_DRAM_OFFSET,
-    .iram = {.base = ADSP_BDW_DSP_IRAM_BASE, .size = ADSP_BDW_IRAM_SIZE},
-    .dram0 = {.base = ADSP_BDW_DSP_DRAM_BASE, .size = ADSP_BDW_DRAM_SIZE},
-    .num_dmac = 2,
-    .num_ssp = 2,
-    .mbox_dev = {
-        .name = "mbox",
-        .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
-        .desc = {.base = ADSP_BDW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},
-    },
-    .shim_dev = {
-        .name = "shim",
-        .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
-        .reg = adsp_hsw_shim_map,
-        .desc = {.base = ADSP_BDW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},
-    },
-    .gp_dmac_dev[0] = {
-        .name = "dmac0",
-        .irq = IRQ_NUM_EXT_DMAC0,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BDW_DMA0_BASE, .size = ADSP_HSW_DMA0_SIZE},
-    },
-    .gp_dmac_dev[1] = {
-        .name = "dmac1",
-        .irq = IRQ_NUM_EXT_DMAC1,
-        .reg_count = ARRAY_SIZE(adsp_gp_dma_map),
-        .reg = adsp_gp_dma_map,
-        .desc = {.base = ADSP_BDW_DMA1_BASE, .size = ADSP_HSW_DMA1_SIZE},
-    },
-    .ssp_dev[0] = {
-        .name = "ssp0",
-        .irq = IRQ_NUM_EXT_SSP0,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BDW_SSP0_BASE, .size = ADSP_HSW_SSP0_SIZE},
-    },
-    .ssp_dev[1] = {
-        .name = "ssp1",
-        .irq = IRQ_NUM_EXT_SSP1,
-        .reg_count = ARRAY_SIZE(adsp_ssp_map),
-        .reg = adsp_ssp_map,
-        .desc = {.base = ADSP_BDW_SSP1_BASE, .size = ADSP_HSW_SSP1_SIZE},
-    },
+
+    .num_mem = ARRAY_SIZE(bdw_mem),
+    .mem_region = bdw_mem,
+
+    .num_io = ARRAY_SIZE(bdw_io),
+    .io_dev = bdw_io,
+
+    .iram_base = ADSP_BDW_DSP_IRAM_BASE,
+    .dram_base = ADSP_BDW_DSP_DRAM_BASE,
 };
 
 static void hsw_adsp_init(MachineState *machine)

@@ -168,17 +168,17 @@ static int sof_module_memcpy(struct adsp_dev *adsp,
 		case SOF_BLK_ROM:
 			continue;	/* not handled atm */
 		case SOF_BLK_TEXT:
-			fprintf(stdout, "text: 0x%lx size 0x%x\n",
-				board->iram.base + block->offset - board->host_iram_offset,
+			fprintf(stdout, "text: 0x%x size 0x%x\n",
+				board->iram_base + block->offset - board->host_iram_offset,
 				block->size);
-			cpu_physical_memory_write(board->iram.base + block->offset - board->host_iram_offset,
+			cpu_physical_memory_write(board->iram_base + block->offset - board->host_iram_offset,
 				(void *)block + sizeof(*block), block->size);
 			break;
 		case SOF_BLK_DATA:
-			fprintf(stdout, "data: 0x%lx size 0x%x\n",
-				board->iram.base + block->offset - board->host_dram_offset,
+			fprintf(stdout, "data: 0x%x size 0x%x\n",
+				board->dram_base + block->offset - board->host_dram_offset,
 				block->size);
-			cpu_physical_memory_write(board->dram0.base + block->offset - board->host_dram_offset,
+			cpu_physical_memory_write(board->dram_base + block->offset - board->host_dram_offset,
 				(void *)block + sizeof(*block), block->size);
 			break;
 		default:
@@ -229,15 +229,15 @@ static int sst_module_memcpy(struct adsp_dev *adsp,
 				block->offset,
 				block->size);
 			offset = board->host_iram_offset + block->offset;
-			cpu_physical_memory_write(board->iram.base + block->offset,
+			cpu_physical_memory_write(board->iram_base + block->offset,
 				(void *)block + sizeof(*block), block->size);
 			break;
 		case SST_HSW_DRAM:
-			fprintf(stdout, "data: 0x%lx size 0x%x\n",
-				board->iram.base + block->offset - board->host_dram_offset,
+			fprintf(stdout, "data: 0x%x size 0x%x\n",
+				board->iram_base + block->offset - board->host_dram_offset,
 				block->size);
 			offset = board->host_dram_offset + block->offset;
-			cpu_physical_memory_write(board->dram0.base + block->offset,
+			cpu_physical_memory_write(board->dram_base + block->offset,
 				(void *)block + sizeof(*block), block->size);
 			break;
 		default:
@@ -363,3 +363,4 @@ int adsp_load_modules(struct adsp_dev *adsp, void *fw, size_t size)
 	fprintf(stderr, "error: invalid firmware signature\n");
 	return -EINVAL;
 }
+

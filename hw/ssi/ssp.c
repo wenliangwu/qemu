@@ -30,8 +30,6 @@
 #include "hw/adsp/log.h"
 #include "hw/ssi/ssp.h"
 
-static struct adsp_ssp *ssp_port[ADSP_MAX_SSP];
-
 const struct adsp_reg_desc adsp_ssp_map[ADSP_SSP_REGS] = {
     {.name = "ssp", .enable = LOG_SSP,
         .offset = 0x00000000, .size = 0x4000},
@@ -39,41 +37,42 @@ const struct adsp_reg_desc adsp_ssp_map[ADSP_SSP_REGS] = {
 
 static void ssp_reset(void *opaque)
 {
-    struct adsp_ssp *ssp = opaque;
-    const struct adsp_reg_space *ssp_dev = ssp->ssp_dev;
+     struct adsp_io_info *info = opaque;
+     struct adsp_reg_space *space = info->space;
 
-    memset(ssp->io, 0, ssp_dev->desc.size);
+     memset(info->region, 0, space->desc.size);
 }
 
 static uint64_t ssp_read(void *opaque, hwaddr addr,
         unsigned size)
 {
-    struct adsp_ssp *ssp = opaque;
-    const struct adsp_reg_space *ssp_dev = ssp->ssp_dev;
+    struct adsp_io_info *info = opaque;
+    struct adsp_reg_space *space = info->space;
+    struct adsp_ssp *ssp = info->private;
 
-    /* only print IO from guest */
-    log_read(ssp->log, ssp_dev, addr, size,
-            ssp->io[addr >> 2]);
+    log_read(ssp->log, space, addr, size,
+        info->region[addr >> 2]);
 
-    return ssp->io[addr >> 2];
+    return info->region[addr >> 2];
 }
 
 static void ssp_write(void *opaque, hwaddr addr,
         uint64_t val, unsigned size)
 {
-    struct adsp_ssp *ssp = opaque;
-    const struct adsp_reg_space *ssp_dev = ssp->ssp_dev;
+    struct adsp_io_info *info = opaque;
+    struct adsp_reg_space *space = info->space;
+    struct adsp_ssp *ssp = info->private;
     uint32_t set, clear;
+
+    log_write(ssp->log, space, addr, val, size,
+        info->region[addr >> 2]);
 
     switch (addr) {
     case SSCR1:
-        log_write(ssp->log, ssp_dev, addr, val, size,
-                ssp->io[addr >> 2]);
+        set = val & ~info->region[addr >> 2];
+        clear = ~val & info->region[addr >> 2];
 
-        set = val & ~ssp->io[addr >> 2];
-        clear = ~val & ssp->io[addr >> 2];
-
-        ssp->io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         /* open file if playback has been enabled */
         if (set & SSCR1_TSRE) {
@@ -138,54 +137,46 @@ static void ssp_write(void *opaque, hwaddr addr,
     case SSDR:
         /* update counters */
         ssp->tx.total_frames =+ size;
-        ssp->io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
 
         break;
     default:
-        log_area_write(ssp->log, ssp_dev, addr, val, size,
-                ssp->io[addr >> 2]);
-
-        ssp->io[addr >> 2] = val;
+        info->region[addr >> 2] = val;
         break;
     }
 }
 
-struct adsp_ssp *ssp_get_port(int port)
-{
-    return ssp_port[port];
-}
-
-static const MemoryRegionOps ssp_ops = {
+const MemoryRegionOps ssp_ops = {
     .read = ssp_read,
     .write = ssp_write,
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-void adsp_ssp_init(MemoryRegion *system_memory,
-    const struct adsp_reg_space *ssp_dev, int num_ssp)
+#define MAX_SSP     6
+struct adsp_ssp *_ssp[MAX_SSP] = {NULL, NULL, NULL, NULL, NULL, NULL};
+
+struct adsp_ssp *ssp_get_port(int port)
 {
-    MemoryRegion *reg_ssp;
+    if (port >= 0  && port < MAX_SSP)
+        return _ssp[port];
+
+    // TODO find an alternative
+    fprintf(stderr, "cant get SSP port %d\n", port);
+    return NULL;
+}
+
+void adsp_ssp_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
+{
     struct adsp_ssp *ssp;
-    int i;
 
-    for (i = 0; i < num_ssp; i++) {
-        ssp = g_malloc(sizeof(*ssp));
+    ssp = g_malloc(sizeof(*ssp));
 
-        ssp->tx.level = 0;
-        ssp->rx.level = 0;
-        ssp->ssp_dev = &ssp_dev[i];
-        sprintf(ssp->name, "%s.io", ssp_dev[i].name);
+    ssp->tx.level = 0;
+    ssp->rx.level = 0;
+    sprintf(ssp->name, "%s.io", info->space->name);
 
-        ssp->log = log_init(NULL);
-
-        /* SSP */
-        reg_ssp = g_malloc(sizeof(*reg_ssp));
-        ssp->io = g_malloc(ssp_dev[i].desc.size);
-        memory_region_init_io(reg_ssp, NULL, &ssp_ops, ssp,
-            ssp->name, ssp_dev[i].desc.size);
-        memory_region_add_subregion(system_memory,
-            ssp_dev[i].desc.base, reg_ssp);
-        qemu_register_reset(ssp_reset, ssp);
-        ssp_port[i] = ssp;
-    }
+    ssp->log = log_init(NULL);
+    info->private = ssp;
+    ssp_reset(info);
 }

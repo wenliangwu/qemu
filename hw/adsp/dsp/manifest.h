@@ -307,5 +307,9 @@ struct fw_image_manifest_v1_5 {
     struct adsp_fw_desc desc;
 } __attribute__((packed));
 
+struct fw_image_manifest_v1_5_sue {
+    struct adsp_fw_desc desc;
+} __attribute__((packed));
+
 
 #endif
