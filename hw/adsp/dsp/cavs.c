@@ -70,6 +70,8 @@ static void io_write(void *opaque, hwaddr addr,
     struct adsp_dev *adsp = info->adsp;
     struct adsp_reg_space *space = info->space;
 
+    info->region[addr >> 2] = val;
+
     log_write(adsp->log, space, addr, val, size,
          info->region[addr >> 2]);
 }
@@ -401,6 +403,83 @@ static const struct adsp_desc cavs_1_5_dsp_desc = {
     .imr_base = ADSP_CAVS_1_5_DSP_IMR_BASE,
 };
 
+static void sue_ctrl_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
+{
+     info->region[0x40 >> 2] = 0x1;
+}
+
+static void cavs1_8_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
+{
+    info->region[0x94 >> 2] = 0x00000080;
+}
+
+#define L2LMCAP			0x00
+#define L2MPAT			0x04
+
+#define HSPGCTL0		0x10
+#define HSRMCTL0		0x14
+#define HSPGISTS0		0x18
+
+#define HSPGCTL1		0x20
+#define HSRMCTL1		0x24
+#define HSPGISTS1		0x28
+
+#define LSPGCTL			0x50
+#define LSRMCTL			0x54
+#define LSPGISTS		0x58
+
+static void cavs1_8_l2m_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
+{
+    info->region[HSPGISTS0 >> 2] = 0x00ffffff;
+    info->region[HSPGISTS1 >> 2] = 0x00ffffff;
+}
+
+static uint64_t cavs1_8_l2m_read(void *opaque, hwaddr addr,
+        unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    log_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
+
+    return info->region[addr >> 2];
+}
+
+static void cavs1_8_l2m_write(void *opaque, hwaddr addr,
+        uint64_t val, unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    switch (addr) {
+    case HSPGCTL0:
+         info->region[HSPGISTS0 >> 2] = val;
+         break;
+    case HSPGCTL1:
+         info->region[HSPGISTS1 >> 2] = val;
+         break;
+    default:
+	break;
+    }
+
+    info->region[addr >> 2] = val;
+
+    log_write(adsp->log, space, addr, val, size,
+         info->region[addr >> 2]);
+}
+
+const MemoryRegionOps cavs1_8_l2m_io_ops = {
+    .read = cavs1_8_l2m_read,
+    .write = cavs1_8_l2m_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 /* CAVS 1.8 IO devices */
 static struct adsp_reg_space cavs_1_8_io[] = {
         { .name = "cap", .reg_count = 0, .reg = NULL,
@@ -429,7 +508,7 @@ static struct adsp_reg_space cavs_1_8_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_TIME_BASE, .size = ADSP_CAVS_1_8_DSP_TIME_SIZE},},
         { .name = "mn", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_MN_BASE, .size = ADSP_CAVS_1_8_DSP_MN_SIZE},},
-        { .name = "l2m", .reg_count = 0, .reg = NULL,
+        { .name = "l2m", .reg_count = 0, .reg = NULL, .init = cavs1_8_l2m_init, .ops = &cavs1_8_l2m_io_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_L2M_BASE, .size = ADSP_CAVS_1_8_DSP_L2M_SIZE},},
         { .name = "l2c", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_L2C_BASE, .size = ADSP_CAVS_1_8_DSP_L2C_SIZE},},
@@ -521,24 +600,6 @@ static struct adsp_mem_desc cavs_1_8_sue_mem[] = {
         .size = ADSP_CAVS_1_8_DSP_SUE_PARMEML_SIZE, .alias = ADSP_CAVS_1_8_DSP_SUE_PARMEM_UNCACHE_BASE},
 };
 
-static void sue_ctrl_init(struct adsp_dev *adsp, MemoryRegion *parent,
-        struct adsp_io_info *info)
-{
-     info->region[0x40 >> 2] = 0x1;
-}
-
-static void cavs1_8_l2m_init(struct adsp_dev *adsp, MemoryRegion *parent,
-        struct adsp_io_info *info)
-{
-    info->region[0x18 >> 2] = 0x00ffffff;
-}
-
-static void cavs1_8_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
-        struct adsp_io_info *info)
-{
-    info->region[0x94 >> 2] = 0x00000080;
-}
-
 /* CAVS 1.8 IO devices */
 static struct adsp_reg_space cavs_1_8_sue_io[] = {
         { .name = "cap", .reg_count = 0, .reg = NULL,
@@ -567,7 +628,7 @@ static struct adsp_reg_space cavs_1_8_sue_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_TIME_BASE, .size = ADSP_CAVS_1_8_DSP_TIME_SIZE},},
         { .name = "mn", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_MN_BASE, .size = ADSP_CAVS_1_8_DSP_MN_SIZE},},
-        { .name = "l2m", .reg_count = 0, .reg = NULL, .init = cavs1_8_l2m_init,
+        { .name = "l2m", .reg_count = 0, .reg = NULL, .init = cavs1_8_l2m_init, .ops = &cavs1_8_l2m_io_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_L2M_BASE, .size = ADSP_CAVS_1_8_DSP_L2M_SIZE},},
         { .name = "l2c", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_L2C_BASE, .size = ADSP_CAVS_1_8_DSP_L2C_SIZE},},

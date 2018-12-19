@@ -48,7 +48,6 @@ struct adsp_mem_desc {
 	size_t size;
 	hwaddr alias;
 	void *ptr;
-	void *default_values;
 };
 
 /* Register descriptor */
