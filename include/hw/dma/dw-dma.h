@@ -236,7 +236,7 @@ extern const MemoryRegionOps dw_dmac_ops;
 
 void build_acpi_dwdma_device(Aml *table);
 void dw_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
-    const struct adsp_reg_space *dev, int num_dmac);
+        struct adsp_io_info *info);
 void dw_dma_msg(struct qemu_io_msg *msg);
 void dw_dmac_reset(void *opaque);
 

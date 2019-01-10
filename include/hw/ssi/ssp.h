@@ -135,5 +135,6 @@ extern const struct adsp_reg_desc adsp_ssp_map[ADSP_SSP_REGS];
 struct adsp_ssp *ssp_get_port(int port);
 void adsp_ssp_init(struct adsp_dev *adsp, MemoryRegion *parent,
         struct adsp_io_info *info);
+extern const MemoryRegionOps ssp_ops;
 
 #endif

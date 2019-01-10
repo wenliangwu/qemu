@@ -44,42 +44,31 @@ static void dw_dsp_do_irq(struct adsp_gp_dmac *dmac, int enable)
 }
 
 void dw_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
-    const struct adsp_reg_space *dev, int num_dmac)
+        struct adsp_io_info *info)
 {
-    MemoryRegion *reg_dmac;
     struct adsp_gp_dmac *dmac;
     char name[32];
-    int i, j;
+    int j;
 
-    for (i = 0; i < num_dmac; i++) {
+    dmac = g_malloc(sizeof(*dmac));
+    dmac->adsp = adsp;
+    dmac->id = info->io_dev;
+    dmac->irq_assert = 0;
+    dmac->is_pci_dev = 0;
+    dmac->do_irq = dw_dsp_do_irq;
+    dmac->log = log_init(NULL);
+   // dmac->desc = &dev[i];
 
-        dmac = g_malloc(sizeof(*dmac));
-        dmac->adsp = adsp;
-        dmac->id = i;
-        dmac->irq_assert = 0;
-        dmac->is_pci_dev = 0;
-        dmac->do_irq = dw_dsp_do_irq;
-        dmac->log = log_init(NULL);
-        dmac->desc = &dev[i];
+    sprintf(name, "dmac%d.io", info->io_dev);
 
-        sprintf(name, "dmac%d.io", i);
 
-        /* DMAC */
-        reg_dmac = g_malloc(sizeof(*reg_dmac));
-        dmac->io = g_malloc(dev[i].desc.size);
-        memory_region_init_io(reg_dmac, NULL, &dw_dmac_ops, dmac,
-            name, dev[i].desc.size);
-        memory_region_add_subregion(parent, dev[i].desc.base, reg_dmac);
-        qemu_register_reset(dw_dmac_reset, dmac);
-
-        /* channels */
-        for (j = 0; j < NUM_CHANNELS; j++) {
-            dmac->dma_chan[j].dmac = dmac;
-            dmac->dma_chan[j].fd = 0;
-            dmac->dma_chan[j].chan = j;
-            dmac->dma_chan[j].file_idx = 0;
-            sprintf(dmac->dma_chan[j].thread_name, "dmac:%d.%d", i, j);
-        }
+    /* channels */
+    for (j = 0; j < NUM_CHANNELS; j++) {
+        dmac->dma_chan[j].dmac = dmac;
+        dmac->dma_chan[j].fd = 0;
+        dmac->dma_chan[j].chan = j;
+        dmac->dma_chan[j].file_idx = 0;
+        sprintf(dmac->dma_chan[j].thread_name, "dmac:%d.%d", info->io_dev, j);
     }
 }
 
