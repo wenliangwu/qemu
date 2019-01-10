@@ -50,5 +50,6 @@ void adsp_byt_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
 void adsp_byt_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg);
 void adsp_byt_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg);
 void byt_ext_timer_cb(void *opaque);
+extern const MemoryRegionOps byt_shim_ops;
 
 #endif
