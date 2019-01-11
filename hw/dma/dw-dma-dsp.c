@@ -57,10 +57,10 @@ void dw_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
     dmac->is_pci_dev = 0;
     dmac->do_irq = dw_dsp_do_irq;
     dmac->log = log_init(NULL);
-   // dmac->desc = &dev[i];
+    dmac->desc = info->space;
+    dmac->io = info->region;
 
     sprintf(name, "dmac%d.io", info->io_dev);
-
 
     /* channels */
     for (j = 0; j < NUM_CHANNELS; j++) {
@@ -70,5 +70,7 @@ void dw_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
         dmac->dma_chan[j].file_idx = 0;
         sprintf(dmac->dma_chan[j].thread_name, "dmac:%d.%d", info->io_dev, j);
     }
+
+    info->private = dmac;
 }
 

@@ -730,7 +730,8 @@ static void dma_start_transfer(struct adsp_gp_dmac *dmac, uint32_t chan)
 
 void dw_dmac_reset(void *opaque)
 {
-    struct adsp_gp_dmac *dmac = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_gp_dmac *dmac = info->private;
     const struct adsp_reg_space *gp_dmac_dev = dmac->desc;
 
     memset(dmac->io, 0, gp_dmac_dev->desc.size);
@@ -741,7 +742,8 @@ void dw_dmac_reset(void *opaque)
 static uint64_t dmac_read(void *opaque, hwaddr addr,
         unsigned size)
 {
-    struct adsp_gp_dmac *dmac = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_gp_dmac *dmac = info->private;
     const struct adsp_reg_space *gp_dmac_dev = dmac->desc;
 
     /* only print IO from guest */
@@ -754,7 +756,8 @@ static uint64_t dmac_read(void *opaque, hwaddr addr,
 static void dmac_write(void *opaque, hwaddr addr,
         uint64_t val, unsigned size)
 {
-    struct adsp_gp_dmac *dmac = opaque;
+    struct adsp_io_info *info = opaque;
+    struct adsp_gp_dmac *dmac = info->private;
     const struct adsp_reg_space *gp_dmac_dev = dmac->desc;
     int chan;
     uint32_t active, set;
