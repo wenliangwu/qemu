@@ -150,6 +150,39 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     return adsp;
 }
 
+static uint64_t io_read(void *opaque, hwaddr addr,
+        unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    log_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
+
+    return info->region[addr >> 2];
+}
+
+/* SHIM IO from ADSP */
+static void io_write(void *opaque, hwaddr addr,
+        uint64_t val, unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    info->region[addr >> 2] = val;
+
+    log_write(adsp->log, space, addr, val, size,
+         info->region[addr >> 2]);
+}
+
+static const MemoryRegionOps mbox_io_ops = {
+    .read = io_read,
+    .write = io_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 static struct adsp_mem_desc byt_mem[] = {
     {.name = "iram", .base = ADSP_BYT_DSP_IRAM_BASE,
         .size = ADSP_BYT_IRAM_SIZE},
@@ -182,7 +215,7 @@ static struct adsp_reg_space byt_io[] = {
         .reg = adsp_byt_shim_map, .init = &adsp_byt_shim_init, .ops = &byt_shim_ops,
         .desc = {.base = ADSP_BYT_DSP_SHIM_BASE, .size = ADSP_BYT_SHIM_SIZE},},
     { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
+        .reg = adsp_mbox_map, .ops = &mbox_io_ops,
         .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
@@ -246,7 +279,7 @@ static struct adsp_reg_space cht_io[] = {
         .reg = adsp_byt_shim_map, .init = &adsp_byt_shim_init, .ops = &byt_shim_ops,
         .desc = {.base = ADSP_BYT_DSP_SHIM_BASE, .size = ADSP_BYT_SHIM_SIZE},},
     { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map,
+        .reg = adsp_mbox_map, .ops = &mbox_io_ops,
         .desc = {.base = ADSP_BYT_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
@@ -255,6 +288,9 @@ static const struct adsp_desc cht_dsp_desc = {
     .ia_irq = IRQ_NUM_EXT_IA,
     .ext_timer_irq = IRQ_NUM_EXT_TIMER,
     .pmc_irq = IRQ_NUM_EXT_PMC,
+
+    .host_iram_offset = ADSP_BYT_HOST_IRAM_OFFSET,
+    .host_dram_offset = ADSP_BYT_HOST_DRAM_OFFSET,
 
     .num_mem = ARRAY_SIZE(byt_mem),
     .mem_region = byt_mem,
@@ -268,22 +304,12 @@ static const struct adsp_desc cht_dsp_desc = {
 
 static void byt_adsp_init(MachineState *machine)
 {
-    struct adsp_dev *adsp;
-
-    adsp = adsp_init(&byt_dsp_desc, machine, "byt");
-// TODO shim init.
-    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &byt_ext_timer_cb, adsp);
-    adsp->ext_clk_kHz = 2500;
+    adsp_init(&byt_dsp_desc, machine, "byt");
 }
 
 static void cht_adsp_init(MachineState *machine)
 {
-    struct adsp_dev *adsp;
-
-    adsp = adsp_init(&cht_dsp_desc, machine, "cht");
-
-    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &byt_ext_timer_cb, adsp);
-    adsp->ext_clk_kHz = 2500;
+    adsp_init(&cht_dsp_desc, machine, "cht");
 }
 
 static void xtensa_byt_machine_init(MachineClass *mc)

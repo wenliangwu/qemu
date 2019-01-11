@@ -90,7 +90,6 @@ static void *pmc_work(void *data)
     return NULL;
 }
 
-
 void byt_ext_timer_cb(void *opaque)
 {
     struct adsp_io_info *info = opaque;
@@ -475,4 +474,6 @@ void adsp_byt_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
 {
     shim_reset(info);
     adsp->shim = info;
+    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &byt_ext_timer_cb, info);
+    adsp->ext_clk_kHz = 2500;
 }
