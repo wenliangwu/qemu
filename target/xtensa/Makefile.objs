@@ -8,6 +8,7 @@ obj-y += core-broxton.o
 obj-y += core-suecreek.o
 obj-y += core-cannonlake.o
 obj-y += core-icelake.o
+obj-y += core-hikey.o
 obj-y += core-fsf.o
 obj-y += core-sample_controller.o
 obj-y += core-test_kc705_be.o
