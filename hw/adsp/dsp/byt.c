@@ -173,6 +173,10 @@ static void io_write(void *opaque, hwaddr addr,
 
     info->region[addr >> 2] = val;
 
+    /* omit 0 writes as it fills mbox log */
+    if (val == 0)
+        return;
+
     log_write(adsp->log, space, addr, val, size,
          info->region[addr >> 2]);
 }
