@@ -5,4 +5,5 @@ obj-y += mbox.o
 obj-y += byt.o
 obj-y += hsw.o
 obj-y += cavs.o
+obj-y += hikey.o
 obj-y += common.o
