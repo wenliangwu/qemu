@@ -144,6 +144,7 @@ static int sof_module_memcpy(struct adsp_dev *adsp,
 {
 	const struct adsp_desc *board = adsp->desc;
 	struct snd_sof_blk_hdr *block;
+	struct adsp_mem_desc *mem;
 	int count;
 
 	fprintf(stdout, "new module size 0x%x blocks 0x%x type 0x%x\n",
@@ -171,14 +172,22 @@ static int sof_module_memcpy(struct adsp_dev *adsp,
 			fprintf(stdout, "text: 0x%x size 0x%x\n",
 				board->iram_base + block->offset - board->host_iram_offset,
 				block->size);
-			cpu_physical_memory_write(board->iram_base + block->offset - board->host_iram_offset,
+
+			mem = adsp_get_mem_space(adsp, board->iram_base + block->offset - board->host_iram_offset);
+			if (!mem)
+				continue;
+			memcpy(mem->ptr + block->offset - board->host_iram_offset,
 				(void *)block + sizeof(*block), block->size);
 			break;
 		case SOF_BLK_DATA:
 			fprintf(stdout, "data: 0x%x size 0x%x\n",
 				board->dram_base + block->offset - board->host_dram_offset,
 				block->size);
-			cpu_physical_memory_write(board->dram_base + block->offset - board->host_dram_offset,
+
+			mem = adsp_get_mem_space(adsp, board->dram_base + block->offset - board->host_dram_offset);
+			if (!mem)
+				continue;
+			memcpy(mem->ptr + block->offset - board->host_dram_offset,
 				(void *)block + sizeof(*block), block->size);
 			break;
 		default:
