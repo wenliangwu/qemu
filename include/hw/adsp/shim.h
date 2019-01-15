@@ -159,4 +159,17 @@
 #define PMC_SET_SSP_19M2	0xc5	/* LPE req SSP clock to 19.2MHz */
 #define PMC_SET_SSP_25M		0xc6	/* LPE req SSP clock to 25MHz  */
 
+/* CAVS */
+#define SHIM_DSPWC          0x20
+
+#define SHIM_DSPWCTTCS      0x28
+#define SHIM_DSPWCTTCS_T0A  (0x1 << 0)
+#define SHIM_DSPWCTTCS_T1A  (0x1 << 1)
+#define SHIM_DSPWCTTCS_T0T  (0x1 << 4)
+#define SHIM_DSPWCTTCS_T1T  (0x1 << 5)
+
+#define SHIM_DSPWCTT0C      0x30
+#define SHIM_DSPWCTT1C      0x38
+
+
 #endif
