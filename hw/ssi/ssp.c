@@ -136,7 +136,7 @@ static void ssp_write(void *opaque, hwaddr addr,
         break;
     case SSDR:
         /* update counters */
-        ssp->tx.total_frames =+ size;
+        ssp->tx.total_frames += size;
         info->region[addr >> 2] = val;
 
         break;
