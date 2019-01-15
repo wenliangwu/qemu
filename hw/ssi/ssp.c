@@ -179,4 +179,5 @@ void adsp_ssp_init(struct adsp_dev *adsp, MemoryRegion *parent,
     ssp->log = log_init(NULL);
     info->private = ssp;
     ssp_reset(info);
+    _ssp[info->io_dev] = ssp;
 }
