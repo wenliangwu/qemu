@@ -24,7 +24,17 @@
 #include "hw/adsp/hw.h"
 
 struct adsp_xtensa;
+struct adsp_io_info;
+
 #define ADSP_MAX_CORES	4
+#define ADSP_MAX_EXT_TIMERS	4
+
+struct adsp_dev_timer {
+	QEMUTimer *timer;
+	uint32_t clk_kHz;
+	int64_t start;
+	struct adsp_io_info *info;
+};
 
 struct adsp_dev {
 
@@ -48,9 +58,7 @@ struct adsp_dev {
 	struct adsp_log *log;
 
 	/* ext timer */
-	QEMUTimer *ext_timer;
-	uint32_t ext_clk_kHz;
-	int64_t ext_timer_start;
+	struct adsp_dev_timer timer[ADSP_MAX_EXT_TIMERS];
 
 	/* PMC */
 	QemuThread pmc_thread;

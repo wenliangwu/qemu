@@ -307,6 +307,248 @@ out:
     return adsp;
 }
 
+struct cavs_irq_desc {
+    int id;
+    int level;
+    uint32_t mask;
+    uint32_t shift;
+};
+
+/* SKL, KBL, APL */
+static const struct cavs_irq_desc irqs[] = {
+    {IRQ_HPGPDMA, 2, 0xff000000, 24},
+    {IRQ_DWCT1, 2, 0x00800000},
+    {IRQ_DWCT0, 2, 0x00400000},
+    {IRQ_L2ME, 2, 0x00200000},
+    {IRQ_DTS, 2, 0x00100000},
+    {IRQ_IDC, 2, 0x00000080},
+    {IRQ_IPC, 2, 0x00000040},
+
+    {IRQ_DSPGCL, 3, 0x80000000},
+    {IRQ_DSPGHOS, 3, 0x7fff0000, 16},
+    {IRQ_HPGPDMA0, 3, 0x00008000},
+    {IRQ_DSPGHIS, 3, 0x00007fff, 0},
+
+    {IRQ_LPGPDMA1, 4, 0x80000000},
+    {IRQ_DSPGLOS, 4, 0x7fff0000, 16},
+    {IRQ_LPGPDMA0, 4, 0x00008000},
+    {IRQ_DSPGLIS, 4, 0x00007fff, 0},
+
+    {IRQ_LPGPDMA1, 5, 0xff000000, 24},
+    {IRQ_LPGPDMA0, 5, 0x00ff0000, 16},
+ //   {IRQ_DWCT1, 5, 0x00008000},
+  //  {IRQ_DWCT0, 5, 0x00004000},
+    {IRQ_DMIC, 5, 0x00000040},
+    {IRQ_SSP, 5, 0x0000003f, 0},
+};
+
+struct cavs_irq_map {
+    int level;
+    int irq;
+};
+
+struct cavs_irq_map irq_map[] = {
+    {2, IRQ_NUM_EXT_LEVEL2},
+    {3, IRQ_NUM_EXT_LEVEL3},
+    {4, IRQ_NUM_EXT_LEVEL4},
+    {5, IRQ_NUM_EXT_LEVEL5},
+};
+
+static void cavs_do_set_irq(struct adsp_io_info *info,
+    const struct cavs_irq_desc *irq_desc, int shift)
+{
+    if (irq_desc->shift)
+        info->region[ILRSD(irq_desc->level) >> 2] |= 1 << (shift + irq_desc->shift);
+    else
+        info->region[ILRSD(irq_desc->level) >> 2] |= irq_desc->mask;
+
+    info->region[ILSC(irq_desc->level) >> 2] =
+        info->region[ILRSD(irq_desc->level) >> 2] &
+        (~info->region[ILMC(irq_desc->level) >> 2]);
+
+    adsp_set_irq(info->adsp, irq_map[irq_desc->level - 2].irq, 1);
+}
+
+static void cavs_do_clear_irq(struct adsp_io_info *info,
+    const struct cavs_irq_desc *irq_desc, int shift)
+{
+    if (irq_desc->shift)
+        info->region[ILRSD(irq_desc->level) >> 2] &= ~(1 << (shift + irq_desc->shift));
+    else
+        info->region[ILRSD(irq_desc->level) >> 2] &= ~irq_desc->mask;
+
+     info->region[ILSC(irq_desc->level) >> 2] =
+        info->region[ILRSD(irq_desc->level) >> 2] &
+        (~info->region[ILMC(irq_desc->level) >> 2]);
+
+    if (!info->region[ILSC(irq_desc->level) >> 2])
+        adsp_set_irq(info->adsp, irq_map[irq_desc->level - 2].irq, 0);
+}
+
+void cavs_irq_set(struct adsp_io_info *info, int irq, int shift)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(irqs); i++) {
+        if (irq == irqs[i].id)
+            cavs_do_set_irq(info, &irqs[i], shift);
+    }
+}
+
+void cavs_irq_clear(struct adsp_io_info *info, int irq, int shift)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE(irqs); i++) {
+        if (irq == irqs[i].id)
+            cavs_do_clear_irq(info, &irqs[i], shift);
+    }
+}
+
+static void cavs_1_5_irq_init(struct adsp_dev *adsp, MemoryRegion *parent,
+        struct adsp_io_info *info)
+{
+    adsp->timer[0].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb0, info);
+    adsp->timer[0].clk_kHz = 2500;
+    adsp->timer[1].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb1, info);
+    adsp->timer[1].clk_kHz = 2500;
+    adsp->timer[0].info = info;
+    adsp->timer[1].info = info;
+    adsp->timer[0].start = adsp->timer[1].start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+}
+
+static uint64_t cavs_1_5_irq_read(void *opaque, hwaddr addr,
+        unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    log_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
+
+    return info->region[addr >> 2];
+}
+
+static void cavs_1_5_irq_write(void *opaque, hwaddr addr,
+        uint64_t val, unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    switch (addr) {
+    case ILMSD(2):
+        /* mask set - level 2 */
+        if (!(info->region[ILMC(2) >> 2] & val)) {
+            info->region[ILMC(2) >> 2] |= val;
+
+            info->region[ILSC(2) >> 2] =
+                (~info->region[ILMC(2) >> 2]) & info->region[ILRSD(2) >> 2];
+
+            if (!info->region[ILSC(2) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL2, 0);
+        }
+        break;
+    case ILMSD(3):
+         /* mask set - level 3 */
+        if (!(info->region[ILMC(3) >> 2] & val)) {
+            info->region[ILMC(3) >> 2] |= val;
+
+            info->region[ILSC(3) >> 2] =
+                (~info->region[ILMC(3) >> 2]) & info->region[ILRSD(3) >> 2];
+
+            if (!info->region[ILSC(3) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL3, 0);
+        }
+        break;
+    case ILMSD(4):
+        /* mask set - level 4 */
+        if (!(info->region[ILMC(4) >> 2] & val)) {
+            info->region[ILMC(4) >> 2] |= val;
+
+            info->region[ILSC(4) >> 2] =
+                (~info->region[ILMC(4) >> 2]) & info->region[ILRSD(4) >> 2];
+
+            if (!info->region[ILSC(4) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL4, 0);
+        }
+        break;
+    case ILMSD(5):
+        /* mask set - level 5 */
+        if (!(info->region[ILMC(5) >> 2] & val)) {
+            info->region[ILMC(5) >> 2] |= val;
+
+            info->region[ILSC(5) >> 2] =
+                (~info->region[ILMC(5) >> 2]) & info->region[ILRSD(5) >> 2];
+
+            if (!info->region[ILSC(5) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL5, 0);
+        }
+        break;
+    case ILMCD(2):
+         /* mask clear - level 2 */
+         if (info->region[ILMC(2) >> 2] & val) {
+             info->region[ILMC(2) >> 2] &= ~val;
+
+            info->region[ILSC(2) >> 2] =
+                (~info->region[ILMC(2) >> 2]) & info->region[ILRSD(2) >> 2];
+
+            if (!info->region[ILSC(2) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL2, 1);
+        }
+        break;
+     case ILMCD(3):
+         /* mask clear - level 3 */
+         if (info->region[ILMC(3) >> 2] & val) {
+             info->region[ILMC(3) >> 2] &= ~val;
+
+            info->region[ILSC(3) >> 2] =
+                (~info->region[ILMC(3) >> 2]) & info->region[ILRSD(3) >> 2];
+
+            if (!info->region[ILSC(3) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL3, 1);
+        }
+        break;
+     case ILMCD(4):
+         /* mask clear - level 4 */
+         if (info->region[ILMC(4) >> 2] & val) {
+             info->region[ILMC(4) >> 2] &= ~val;
+
+            info->region[ILSC(4) >> 2] =
+                (~info->region[ILMC(4) >> 2]) & info->region[ILRSD(4) >> 2];
+
+            if (!info->region[ILSC(4) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL4, 1);
+        }
+        break;
+
+     case ILMCD(5):
+         /* mask clear - level 5 */
+         if (info->region[ILMC(5) >> 2] & val) {
+             info->region[ILMC(5) >> 2] &= ~val;
+
+            info->region[ILSC(5) >> 2] =
+                (~info->region[ILMC(5) >> 2]) & info->region[ILRSD(5) >> 2];
+
+            if (!info->region[ILSC(5) >> 2])
+                 adsp_set_irq(adsp, IRQ_NUM_EXT_LEVEL5, 1);
+        }
+        break;
+    default:
+    break;
+    }
+
+    log_write(adsp->log, space, addr, val, size,
+         info->region[addr >> 2]);
+}
+
+const MemoryRegionOps cavs1_5_irq_io_ops = {
+    .read = cavs_1_5_irq_read,
+    .write = cavs_1_5_irq_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 /* CAVS 1.5 IO devices */
 static struct adsp_reg_space cavs_1_5_io[] = {
         { .name = "cmd", .reg_count = 0, .reg = NULL,
@@ -328,6 +570,7 @@ static struct adsp_reg_space cavs_1_5_io[] = {
         { .name = "hostwin3", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_5_DSP_HOST_WIN_BASE(3), .size = ADSP_CAVS_1_5_DSP_HOST_WIN_SIZE},},
         { .name = "irq", .reg_count = 0, .reg = NULL,
+            .init = cavs_1_5_irq_init, .ops = &cavs1_5_irq_io_ops,
             .desc = {.base = ADSP_CAVS_1_5_DSP_IRQ_BASE, .size = ADSP_CAVS_1_5_DSP_IRQ_SIZE},},
         { .name = "timer", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_5_DSP_TIME_BASE, .size = ADSP_CAVS_1_5_DSP_TIME_SIZE},},
@@ -352,6 +595,7 @@ static struct adsp_reg_space cavs_1_5_io[] = {
         {.name = "dmac1-hp", .reg_count = ARRAY_SIZE(adsp_gp_dma_map), .reg = adsp_gp_dma_map,
            .desc = {.base = ADSP_CAVS_1_5_DSP_HP_GP_DMA_LINK_BASE(1), .size = ADSP_CAVS_1_5_DSP_HP_GP_DMA_LINK_SIZE},},
         {.name = "shim", .reg_count = ARRAY_SIZE(adsp_bxt_shim_map), .reg = adsp_bxt_shim_map,
+           .init = &adsp_cavs_shim_init, .ops = &cavs_shim_ops,
            .desc = {.base = ADSP_CAVS_1_5_DSP_SHIM_BASE, .size = ADSP_CAVS_1_5_SHIM_SIZE},},
 };
 
@@ -407,12 +651,6 @@ static void sue_ctrl_init(struct adsp_dev *adsp, MemoryRegion *parent,
         struct adsp_io_info *info)
 {
      info->region[0x40 >> 2] = 0x1;
-}
-
-static void cavs1_8_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
-        struct adsp_io_info *info)
-{
-    info->region[0x94 >> 2] = 0x00000080;
 }
 
 #define L2LMCAP			0x00
@@ -549,6 +787,7 @@ static struct adsp_reg_space cavs_1_8_io[] = {
         { .name = "dmac1", .reg_count = ARRAY_SIZE(adsp_gp_dma_map), .reg = adsp_gp_dma_map,
            .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_BASE(1), .size = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_SIZE},},
         { .name = "shim", .reg_count = ARRAY_SIZE(adsp_bxt_shim_map), .reg = adsp_bxt_shim_map,
+           .init = &adsp_cavs_shim_init, .ops = &cavs_shim_ops,
            .desc = {.base = ADSP_CAVS_1_8_DSP_SHIM_BASE, .size = ADSP_CAVS_1_8_DSP_SHIM_SIZE},},
 };
 
@@ -652,7 +891,8 @@ static struct adsp_reg_space cavs_1_8_sue_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_BASE, .size = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_SIZE},},
         { .name = "lp-gpda-shim", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GPDMA_SHIM_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GPDMA_SHIM_SIZE * 4},},
-        { .name = "shim", .reg_count = ARRAY_SIZE(adsp_bxt_shim_map), .reg = adsp_bxt_shim_map, .init = cavs1_8_shim_init,
+        { .name = "shim", .reg_count = ARRAY_SIZE(adsp_bxt_shim_map), .reg = adsp_bxt_shim_map,
+            .init = &adsp_cavs_shim_init, .ops = &cavs_shim_ops,
            .desc = {.base = ADSP_CAVS_1_8_DSP_SHIM_BASE, .size = ADSP_CAVS_1_8_DSP_SHIM_SIZE},},
         { .name = "dmac0", .reg_count = ARRAY_SIZE(adsp_gp_dma_map), .reg = adsp_gp_dma_map,
            .desc = {.base = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_BASE(0), .size = ADSP_CAVS_1_8_DSP_LP_GP_DMA_LINK_SIZE},},
