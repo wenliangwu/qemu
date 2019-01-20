@@ -32,31 +32,76 @@
 #include "hw/audio/adsp-dev.h"
 #include "hw/adsp/shim.h"
 #include "hw/adsp/log.h"
+#include "hw/adsp/cavs.h"
 #include "cavs.h"
 #include "common.h"
 
-static void rearm_ext_timer(struct adsp_dev *adsp,struct adsp_io_info *info)
+static uint64_t cavs_set_time(struct adsp_dev *adsp, struct adsp_io_info *info)
 {
-    uint32_t wake = info->region[SHIM_EXT_TIMER_CNTLL >> 2];
+	uint64_t time = (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->timer[0].start);
 
-    info->region[SHIM_EXT_TIMER_STAT >> 2] =
-        (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->ext_timer_start) /
-        (1000000 / adsp->ext_clk_kHz);
+	info->region[(SHIM_DSPWC + 4) >> 2] = (uint32_t)(time >> 32);
+	info->region[(SHIM_DSPWC + 0) >> 2] = (uint32_t)(time & 0xffffffff);
 
-    timer_mod(adsp->ext_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
-            muldiv64(wake - info->region[SHIM_EXT_TIMER_STAT >> 2],
-                1000000, adsp->ext_clk_kHz));
+	return time;
 }
 
-void cavs_ext_timer_cb(void *opaque)
+static void rearm_ext_timer0(struct adsp_dev *adsp,struct adsp_io_info *info)
+{
+    uint64_t wake = ((uint64_t)(info->region[(SHIM_DSPWCTT0C + 4)>> 2]) << 32) | 
+		info->region[(SHIM_DSPWCTT0C + 0)>> 2];
+
+    cavs_set_time(adsp, info);
+
+    /* never wakes ups if wake == 0 */
+    if (wake == 0)
+        wake = 10000000;
+
+    timer_mod(adsp->timer[0].timer,
+        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + wake * 100);
+}
+
+static void rearm_ext_timer1(struct adsp_dev *adsp,struct adsp_io_info *info)
+{
+     uint64_t wake = ((uint64_t)(info->region[SHIM_DSPWCTT1C >> 2]) << 32) | 
+		info->region[(SHIM_DSPWCTT1C + 4)>> 2];
+
+    cavs_set_time(adsp, info);
+
+    /* never wakes ups if wake == 0 */
+    if (wake == 0)
+        wake = 10000000;
+
+    timer_mod(adsp->timer[1].timer,
+        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + wake + 10000000);
+}
+
+void cavs_ext_timer_cb0(void *opaque)
 {
     struct adsp_io_info *info = opaque;
     struct adsp_dev *adsp = info->adsp;
-    uint32_t pisr = info->region[SHIM_PISR >> 2];
 
-    pisr |= SHIM_PISR_EXTT;
-    info->region[SHIM_PISR >> 2] = pisr;
-    adsp_set_irq(adsp, adsp->desc->ext_timer_irq, 1);
+    /* clear T0A */
+    info->region[SHIM_DSPWCTTCS] &= ~SHIM_DSPWCTTCS_T0A;
+    /* set T0T */
+    info->region[SHIM_DSPWCTTCS] |= SHIM_DSPWCTTCS_T0T;
+
+    /* Interrupt may be generated if IL2MDx.FCT0 bit is set. */
+    cavs_irq_set(adsp->timer[0].info, IRQ_DWCT0, 0);
+}
+
+void cavs_ext_timer_cb1(void *opaque)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+
+     /* clear T0A */
+    info->region[SHIM_DSPWCTTCS] &= ~SHIM_DSPWCTTCS_T1A;
+    /* set T0T */
+    info->region[SHIM_DSPWCTTCS] |= SHIM_DSPWCTTCS_T1T;
+
+    /* Interrupt may be generated if IL2MDx.FCT1 bit is set. */
+    cavs_irq_set(adsp->timer[1].info, IRQ_DWCT1, 0);
 }
 
 static void shim_reset(void *opaque)
@@ -78,6 +123,15 @@ static uint64_t shim_read(void *opaque, hwaddr addr,
     log_read(adsp->log, space, addr, size,
         info->region[addr >> 2]);
 
+     switch (addr) {
+     case SHIM_DSPWC:
+	cavs_set_time(adsp, info);
+     case SHIM_DSPWC + 4:
+         break;
+     default:
+         break;
+    }
+
     return info->region[addr >> 2];
 }
 
@@ -88,143 +142,33 @@ static void shim_write(void *opaque, hwaddr addr,
     struct adsp_io_info *info = opaque;
     struct adsp_dev *adsp = info->adsp;
     struct adsp_reg_space *space = info->space;
-    struct qemu_io_msg_reg32 reg32;
-    struct qemu_io_msg_irq irq;
-    uint32_t active, isrx;
 
     log_write(adsp->log, space, addr, val, size,
         info->region[addr >> 2]);
 
     /* special case registers */
     switch (addr) {
-    case SHIM_IPCDL:
-
-        /* set value via SHM */
-        info->region[addr >> 2] = val;
-
-        /* reset the CPU and halt if we are dead to ease debugging */
-        if ((val & 0xffff0000) == 0xdead0000) {
-
-            log_text(adsp->log, LOG_CPU_RESET,
-                "firmware is dead. cpu held in reset\n");
-
-            cpu_reset(CPU(adsp->xtensa[0]->cpu));
-            //vm_stop(RUN_STATE_SHUTDOWN); TODO: fix, causes hang
-            adsp->in_reset = 1;
-        }
+    case SHIM_DSPWC:
         break;
-    case SHIM_IPCDH:
-        /* DSP to host IPC command */
-
-        /* set value via SHM */
+    case SHIM_DSPWCTTCS:
+        if ((val & SHIM_DSPWCTTCS_T0A) &&
+            !(info->region[addr >> 2] & SHIM_DSPWCTTCS_T0A))
+            rearm_ext_timer0(adsp, info);
+        if ((val & SHIM_DSPWCTTCS_T1A) &&
+            !(info->region[addr >> 2] & SHIM_DSPWCTTCS_T1A))
+            rearm_ext_timer1(adsp, info);
         info->region[addr >> 2] = val;
-
-        /* set/clear status bit */
-        isrx = info->region[SHIM_ISRX >> 2] & ~(SHIM_ISRX_DONE | SHIM_ISRX_BUSY);
-        isrx |= val & SHIM_IPCD_BUSY ? SHIM_ISRX_BUSY : 0;
-        isrx |= val & SHIM_IPCD_DONE ? SHIM_ISRX_DONE : 0;
-        info->region[SHIM_ISRX >> 2] = isrx;
-
-        /* do we need to send an IRQ ? */
-        if (val & SHIM_IPCD_BUSY) {
-
-            log_text(adsp->log, LOG_IRQ_BUSY,
-                "irq: send busy interrupt 0x%8.8lx\n", val);
-
-            /* send IRQ to parent */
-            irq.hdr.type = QEMU_IO_TYPE_IRQ;
-            irq.hdr.msg = QEMU_IO_MSG_IRQ;
-            irq.hdr.size = sizeof(irq);
-            irq.irq = 0;
-
-            qemu_io_send_msg(&irq.hdr);
-        }
         break;
-    case SHIM_IPCXH:
-        /* DSP to host IPC notify */
-
-        /* set value via SHM */
+    case SHIM_DSPWCTT0C:
         info->region[addr >> 2] = val;
-
-        /* set/clear status bit */
-        isrx = info->region[SHIM_ISRX >> 2] & ~(SHIM_ISRX_DONE | SHIM_ISRX_BUSY);
-        isrx |= val & SHIM_IPCX_BUSY ? SHIM_ISRX_BUSY : 0;
-        isrx |= val & SHIM_IPCX_DONE ? SHIM_ISRX_DONE : 0;
-        info->region[SHIM_ISRX >> 2] = isrx;
-
-        /* do we need to send an IRQ ? */
-        if (val & SHIM_IPCX_DONE) {
-
-            log_text(adsp->log, LOG_IRQ_DONE,
-                "irq: send done interrupt 0x%8.8lx\n", val);
-
-            /* send IRQ to parent */
-            irq.hdr.type = QEMU_IO_TYPE_IRQ;
-            irq.hdr.msg = QEMU_IO_MSG_IRQ;
-            irq.hdr.size = sizeof(irq);
-            irq.irq = 0;
-
-            qemu_io_send_msg(&irq.hdr);
-        }
         break;
-    case SHIM_IMRD:
-
-        /* set value via SHM */
+    case SHIM_DSPWCTT0C + 4:
         info->region[addr >> 2] = val;
-
-        /* DSP IPC interrupt mask */
-        active = info->region[SHIM_ISRD >> 2] & ~(info->region[SHIM_IMRD >> 2]);
-
-        log_text(adsp->log, LOG_IRQ_ACTIVE,
-            "irq: IMRD masking %x mask %x active %x\n",
-            info->region[SHIM_ISRD >> 2],
-            info->region[SHIM_IMRD >> 2], active);
-
-        if (!active) {
-            adsp_set_irq(adsp, adsp->desc->ia_irq, 0);
-        }
-
         break;
-    case SHIM_CSR:
-
-        /* set value via SHM */
+    case SHIM_DSPWCTT1C:
         info->region[addr >> 2] = val;
-
-        /* now send msg to HOST VM to notify register write */
-        reg32.hdr.type = QEMU_IO_TYPE_REG;
-        reg32.hdr.msg = QEMU_IO_MSG_REG32W;
-        reg32.hdr.size = sizeof(reg32);
-        reg32.reg = addr;
-        reg32.val = val;
-        qemu_io_send_msg(&reg32.hdr);
-        break;
-    case SHIM_EXT_TIMER_CNTLL:
-        /* set the timer timeout value via SHM */
+    case SHIM_DSPWCTT1C + 4:
         info->region[addr >> 2] = val;
-        if (info->region[SHIM_EXT_TIMER_CNTLH >> 2] & SHIM_EXT_TIMER_RUN)
-            rearm_ext_timer(adsp, info);
-        break;
-    case SHIM_EXT_TIMER_CNTLH:
-
-        /* enable the timer ? */
-        if (val & SHIM_EXT_TIMER_RUN &&
-            !(info->region[addr >> 2] & SHIM_EXT_TIMER_RUN)) {
-                adsp->ext_timer_start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
-                rearm_ext_timer(adsp, info);
-        }
-
-        /* set value via SHM */
-        info->region[addr >> 2] = val;
-
-        /* set/clear ext timer */
-        if (val & SHIM_EXT_TIMER_CLEAR)
-            info->region[SHIM_EXT_TIMER_STAT >> 2] = 0;
-
-        break;
-    case SHIM_EXT_TIMER_STAT:
-        /* set status value via SHM - should not be written to ? */
-        info->region[addr >> 2] = val;
-        rearm_ext_timer(adsp, info);
         break;
     default:
         break;
@@ -341,4 +285,5 @@ void adsp_cavs_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
 {
     shim_reset(info);
     adsp->shim = info;
+    info->region[0x94 >> 2] = 0x00000080;
 }

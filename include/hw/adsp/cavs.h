@@ -302,5 +302,35 @@
 /* mailbox */
 #define ADSP_CAVS_DSP_MAILBOX_SIZE      0x4000
 
+/* external interrupts */
+#define IRQ_HPGPDMA     0
+#define IRQ_DWCT1       1
+#define IRQ_DWCT0       2
+#define IRQ_L2ME       3
+#define IRQ_DTS       4
+#define IRQ_IDC       5
+#define IRQ_IPC       6
+#define IRQ_DSPGCL       7
+#define IRQ_DSPGHOS       8
+#define IRQ_HPGPDMA0       9
+#define IRQ_DSPGHIS       10
+#define IRQ_LPGPDMA1       11
+#define IRQ_DSPGLOS       12
+#define IRQ_LPGPDMA0       13
+#define IRQ_DSPGLIS       14
+#define IRQ_DMIC       15
+#define IRQ_SSP       16
+
+/* external IRQ xtensa mappings */
+#define IRQ_NUM_EXT_LEVEL2  6   /* level 2 */
+#define IRQ_NUM_EXT_LEVEL3  10  /* level 3 */
+#define IRQ_NUM_EXT_LEVEL4  13  /* level 4 */
+#define IRQ_NUM_EXT_LEVEL5  16  /* level 5 */
+
+extern const MemoryRegionOps cavs_shim_ops;
+void cavs_irq_set(struct adsp_io_info *info, int irq, int shift);
+void cavs_irq_clear(struct adsp_io_info *info, int irq, int shift);
+void cavs_ext_timer_cb0(void *opaque);
+void cavs_ext_timer_cb1(void *opaque);
 
 #endif

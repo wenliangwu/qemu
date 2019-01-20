@@ -40,12 +40,12 @@ static void rearm_ext_timer(struct adsp_dev *adsp, struct adsp_io_info *info)
     uint32_t wake = info->region[SHIM_EXT_TIMER_CNTLL >> 2];
 
     info->region[SHIM_EXT_TIMER_STAT >> 2] =
-        (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->ext_timer_start) /
-        (1000000 / adsp->ext_clk_kHz);
+        (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->timer[0].start) /
+        (1000000 / adsp->timer[0].clk_kHz);
 
-    timer_mod(adsp->ext_timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
+    timer_mod(adsp->timer[0].timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) +
             muldiv64(wake - info->region[SHIM_EXT_TIMER_STAT >> 2],
-                1000000, adsp->ext_clk_kHz));
+                1000000, adsp->timer[0].clk_kHz));
 }
 
 static void *pmc_work(void *data)
@@ -120,8 +120,8 @@ static uint64_t shim_read(void *opaque, hwaddr addr,
     switch (addr) {
     case SHIM_EXT_TIMER_STAT:
         info->region[addr >> 2] =
-        (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->ext_timer_start) /
-            (1000000 / adsp->ext_clk_kHz);
+        (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->timer[0].start) /
+            (1000000 / adsp->timer[0].clk_kHz);
         break;
     case SHIM_PISR:
         info->region[addr >> 2] = 0;
@@ -291,7 +291,7 @@ static void shim_write(void *opaque, hwaddr addr,
         /* enable the timer ? */
         if (val & SHIM_EXT_TIMER_RUN &&
             !(info->region[addr >> 2] & SHIM_EXT_TIMER_RUN)) {
-                adsp->ext_timer_start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
+                adsp->timer[0].start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
                 rearm_ext_timer(adsp, info);
         }
 
@@ -474,6 +474,6 @@ void adsp_byt_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
 {
     shim_reset(info);
     adsp->shim = info;
-    adsp->ext_timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &byt_ext_timer_cb, info);
-    adsp->ext_clk_kHz = 2500;
+    adsp->timer[0].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &byt_ext_timer_cb, info);
+    adsp->timer[0].clk_kHz = 2500;
 }

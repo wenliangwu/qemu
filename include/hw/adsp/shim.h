@@ -171,5 +171,13 @@
 #define SHIM_DSPWCTT0C      0x30
 #define SHIM_DSPWCTT1C      0x38
 
+#define ILMSD(x)   (0x0 + 0x40 * (x - 2)) /* mask set - W1S */
+#define ILMCD(x)   (0x4 + 0x40 * (x - 2)) /* mask clear - W1C */
+#define ILMC(x)   (0x8 + 0x40 * (x - 2))  /* mask status - ROV */
+#define ILSC(x)   (0xc + 0x40 * (x - 2))  /* IRQ status - ROV after mask */
+
+#define ILRSD(x)      (0x100 + 0x4 * (x - 2))   /* RAW status */
+
+
 
 #endif
