@@ -86,7 +86,7 @@ static const struct dw_desc dw_dev = {
     },
 };
 
-static void dw_host_do_irq(struct adsp_gp_dmac *dmac, int enable)
+static void dw_host_do_irq(struct adsp_gp_dmac *dmac, int enable, uint32_t mask)
 {
         pci_set_irq(&dmac->dw_host->dev, enable);
 }

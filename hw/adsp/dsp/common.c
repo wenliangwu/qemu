@@ -34,7 +34,7 @@
 #include "hw/adsp/log.h"
 #include "common.h"
 
-void adsp_set_irq(struct adsp_dev *adsp, int irq, int active)
+void adsp_set_lvl1_irq(struct adsp_dev *adsp, int irq, int active)
 {
     /* TODO: allow interrupts other cores than core 0 */
     CPUXtensaState *env = adsp->xtensa[0]->env;

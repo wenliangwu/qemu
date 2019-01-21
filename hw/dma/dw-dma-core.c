@@ -92,14 +92,14 @@ static void dmac_reg_sync(struct adsp_gp_dmac *dmac, hwaddr addr)
             log_text(dmac->log, LOG_DMA_IRQ, "IRQ: DMAC %d set\n",
                 dmac->id);
 
-            dmac->do_irq(dmac, 1);
+            dmac->do_irq(dmac, 1, dmac->io[DW_INTR_STATUS >> 2]);
 
         } else if (dmac->io[DW_INTR_STATUS >> 2] == 0 && dmac->irq_assert) {
             dmac->irq_assert = 0;
 
             log_text(dmac->log, LOG_DMA_IRQ,"IRQ: DMAC %d clear\n",
                 dmac->id);
-            dmac->do_irq(dmac, 0);
+            dmac->do_irq(dmac, 0, dmac->io[DW_INTR_STATUS >> 2]);
         }
         break;
     default:

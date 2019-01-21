@@ -318,8 +318,29 @@
 #define IRQ_DSPGLOS       12
 #define IRQ_LPGPDMA0       13
 #define IRQ_DSPGLIS       14
-#define IRQ_DMIC       15
-#define IRQ_SSP       16
+#define IRQ_DMIC0       15
+#define IRQ_DMIC1       16
+#define IRQ_SSP0       17
+#define IRQ_SSP1       18
+#define IRQ_SSP2       19
+#define IRQ_SSP3       20
+#define IRQ_SSP4       21
+#define IRQ_SSP5       22
+#define IRQ_LPGPDMA     23
+#define IRQ_SNDW    24
+
+
+struct cavs_irq_desc {
+    int id;
+    int level;
+    uint32_t mask;
+    uint32_t shift;
+};
+
+struct cavs_irq_map {
+    int level;
+    int irq;
+};
 
 /* external IRQ xtensa mappings */
 #define IRQ_NUM_EXT_LEVEL2  6   /* level 2 */
@@ -328,8 +349,8 @@
 #define IRQ_NUM_EXT_LEVEL5  16  /* level 5 */
 
 extern const MemoryRegionOps cavs_shim_ops;
-void cavs_irq_set(struct adsp_io_info *info, int irq, int shift);
-void cavs_irq_clear(struct adsp_io_info *info, int irq, int shift);
+void cavs_irq_set(struct adsp_io_info *info, int irq, uint32_t mask);
+void cavs_irq_clear(struct adsp_io_info *info, int irq, uint32_t mask);
 void cavs_ext_timer_cb0(void *opaque);
 void cavs_ext_timer_cb1(void *opaque);
 
