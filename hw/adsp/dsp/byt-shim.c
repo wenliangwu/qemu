@@ -85,7 +85,7 @@ static void *pmc_work(void *data)
     info->region[SHIM_ISRLPESC >> 2] |= SHIM_ISRLPESC_DONE;
 
     qemu_mutex_lock_iothread();
-    adsp_set_irq(adsp, adsp->desc->pmc_irq, 1);
+    adsp_set_lvl1_irq(adsp, adsp->desc->pmc_irq, 1);
     qemu_mutex_unlock_iothread();
     return NULL;
 }
@@ -98,7 +98,7 @@ void byt_ext_timer_cb(void *opaque)
 
     pisr |= SHIM_PISR_EXTT;
     info->region[SHIM_PISR >> 2] = pisr;
-    adsp_set_irq(adsp, adsp->desc->ext_timer_irq, 1);
+    adsp_set_lvl1_irq(adsp, adsp->desc->ext_timer_irq, 1);
 }
 
 static void shim_reset(void *opaque)
@@ -236,7 +236,7 @@ static void shim_write(void *opaque, hwaddr addr,
             info->region[SHIM_IMRD >> 2], active);
 
         if (!active) {
-            adsp_set_irq(adsp, adsp->desc->ia_irq, 0);
+            adsp_set_lvl1_irq(adsp, adsp->desc->ia_irq, 0);
         }
 
         break;
@@ -259,7 +259,7 @@ static void shim_write(void *opaque, hwaddr addr,
         info->region[addr >> 2] &= ~val;
 
         if (val & SHIM_PISR_EXTT) {
-            adsp_set_irq(adsp, adsp->desc->ext_timer_irq, 0);
+            adsp_set_lvl1_irq(adsp, adsp->desc->ext_timer_irq, 0);
         }
 
         break;
@@ -277,7 +277,7 @@ static void shim_write(void *opaque, hwaddr addr,
             info->region[SHIM_PIMR >> 2], active);
 
         if (!(active & SHIM_PISR_EXTT)) {
-            adsp_set_irq(adsp, adsp->desc->ext_timer_irq, 0);
+            adsp_set_lvl1_irq(adsp, adsp->desc->ext_timer_irq, 0);
         }
         break;
     case SHIM_EXT_TIMER_CNTLL:
@@ -355,7 +355,7 @@ static void shim_write(void *opaque, hwaddr addr,
 
 
         if (!active) {
-            adsp_set_irq(adsp, adsp->desc->pmc_irq, 0);
+            adsp_set_lvl1_irq(adsp, adsp->desc->pmc_irq, 0);
         }
 
         break;
@@ -458,7 +458,7 @@ void adsp_byt_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 
     if (active) {
         qemu_mutex_lock_iothread();
-        adsp_set_irq(adsp, adsp->desc->ia_irq, 1);
+        adsp_set_lvl1_irq(adsp, adsp->desc->ia_irq, 1);
         qemu_mutex_unlock_iothread();
     }
 }

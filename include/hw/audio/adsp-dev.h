@@ -36,6 +36,11 @@ struct adsp_dev_timer {
 	struct adsp_io_info *info;
 };
 
+struct adsp_dev_ops {
+    void (*irq_set)(struct adsp_io_info *info, int irq, uint32_t mask);
+    void (*irq_clear)(struct adsp_io_info *info, int irq, uint32_t mask);
+};
+
 struct adsp_dev {
 
     struct adsp_io_info *shim;
@@ -63,8 +68,24 @@ struct adsp_dev {
 	/* PMC */
 	QemuThread pmc_thread;
 	uint32_t pmc_cmd;
+
+	/* ops */
+	struct adsp_dev_ops *ops;
 };
 
-void adsp_set_irq(struct adsp_dev *adsp, int irq, int active);
+void adsp_set_lvl1_irq(struct adsp_dev *adsp, int irq, int active);
+
+static inline void adsp_irq_set(struct adsp_dev *adsp,
+    struct adsp_io_info *info, int irq, uint32_t mask)
+{
+    if (adsp->ops->irq_set)
+        adsp->ops->irq_set(info, irq, mask);
+}
+static inline void adsp_irq_clear(struct adsp_dev *adsp,
+    struct adsp_io_info *info, int irq, uint32_t mask)
+{
+    if (adsp->ops->irq_clear)
+        adsp->ops->irq_clear(info, irq, mask);
+}
 
 #endif

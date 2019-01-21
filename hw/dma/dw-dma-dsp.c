@@ -38,9 +38,15 @@
 #include "hw/ssi/ssp.h"
 #include "hw/dma/dw-dma.h"
 
-static void dw_dsp_do_irq(struct adsp_gp_dmac *dmac, int enable)
+static void dw_dsp_do_irq(struct adsp_gp_dmac *dmac, int enable, uint32_t mask)
 {
-    adsp_set_irq(dmac->adsp, dmac->desc->irq, enable);
+    struct adsp_io_info *info = dmac->info;
+
+    if (enable) {
+        adsp_irq_set(dmac->adsp, info, info->space->irq, mask);
+    } else {
+        adsp_irq_clear(dmac->adsp, info, info->space->irq, mask);
+    }
 }
 
 void dw_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
@@ -59,6 +65,7 @@ void dw_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
     dmac->log = log_init(NULL);
     dmac->desc = info->space;
     dmac->io = info->region;
+    dmac->info = info;
 
     sprintf(name, "dmac%d.io", info->io_dev);
 

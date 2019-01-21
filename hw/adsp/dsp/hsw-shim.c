@@ -141,7 +141,7 @@ static void shim_write(void *opaque, hwaddr addr,
             info->region[SHIM_IMRD >> 2], active);
 
         if (!active) {
-            adsp_set_irq(adsp, adsp->desc->ia_irq, 0);
+            adsp_set_lvl1_irq(adsp, adsp->desc->ia_irq, 0);
         }
 
         break;
@@ -259,7 +259,7 @@ void adsp_bdw_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 
     if (active) {
         qemu_mutex_lock_iothread();
-        adsp_set_irq(adsp, adsp->desc->ia_irq, 1);
+        adsp_set_lvl1_irq(adsp, adsp->desc->ia_irq, 1);
         qemu_mutex_unlock_iothread();
     }
 }

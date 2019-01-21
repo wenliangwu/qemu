@@ -39,6 +39,7 @@ struct adsp_dev;
 struct adsp_host;
 struct adsp_gp_dmac;
 struct adsp_log;
+struct adsp_io_info;
 
 #define DW_DMA_PCI_ID		0x9c60
 
@@ -200,9 +201,10 @@ struct adsp_gp_dmac {
     int irq_assert;
     int irq;
     int is_pci_dev;
-    void (*do_irq)(struct adsp_gp_dmac *dmac, int enable);
+    void (*do_irq)(struct adsp_gp_dmac *dmac, int enable, uint32_t mask);
     struct adsp_log *log;
 
+    struct adsp_io_info *info;
     const struct adsp_reg_space *desc;
     struct adsp_dev *adsp;
     struct dw_host *dw_host;

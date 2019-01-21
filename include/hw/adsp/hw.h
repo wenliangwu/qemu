@@ -105,6 +105,8 @@ struct adsp_desc {
 	/* devices */
 	int num_io;
 	struct adsp_reg_space *io_dev; /* misc device atm */
+
+	struct adsp_dev_ops *ops;
 };
 
 int adsp_load_modules(struct adsp_dev *adsp, void *fw, size_t size);
