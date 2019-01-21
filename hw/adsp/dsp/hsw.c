@@ -77,6 +77,23 @@ static int bridge_cb(void *data, struct qemu_io_msg *msg)
     return 0;
 }
 
+static void hsw_irq_set(struct adsp_io_info *info, int irq, uint32_t mask)
+{
+     struct adsp_dev *adsp = info->adsp;
+     adsp_set_lvl1_irq(adsp, irq, 1);
+}
+
+static void hsw_irq_clear(struct adsp_io_info *info, int irq, uint32_t mask)
+{
+     struct adsp_dev *adsp = info->adsp;
+     adsp_set_lvl1_irq(adsp, irq, 0);
+}
+
+struct adsp_dev_ops hsw_ops = {
+    .irq_set = hsw_irq_set,
+    .irq_clear = hsw_irq_clear,
+};
+
 static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     MachineState *machine, const char *name)
 {
@@ -93,6 +110,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     adsp->machine_opts = qemu_get_machine_opts();
     adsp->cpu_model = machine->cpu_model;
     adsp->kernel_filename = qemu_opt_get(adsp->machine_opts, "kernel");
+    adsp->ops = &hsw_ops;
 
     /* initialise CPU */
     if (!adsp->cpu_model) {
