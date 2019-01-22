@@ -73,7 +73,7 @@ static void rearm_ext_timer1(struct adsp_dev *adsp,struct adsp_io_info *info)
         wake = 10000000;
 
     timer_mod(adsp->timer[1].timer,
-        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + wake + 10000000);
+        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + wake * 100);
 }
 
 void cavs_ext_timer_cb0(void *opaque)
@@ -175,6 +175,7 @@ static void shim_write(void *opaque, hwaddr addr,
     }
 }
 
+#if 0
 /* 32 bit SHIM IO from host */
 static void do_shim32(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
@@ -234,43 +235,24 @@ static void do_shim64(struct adsp_dev *adsp, struct qemu_io_msg *msg)
         break;
     }
 }
+#endif
 
 void adsp_cavs_shim_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
     switch (msg->msg) {
     case QEMU_IO_MSG_REG32W:
-        do_shim32(adsp, msg);
+       // do_shim32(adsp, msg);
         break;
     case QEMU_IO_MSG_REG32R:
         break;
     case QEMU_IO_MSG_REG64W:
-        do_shim64(adsp, msg);
+       // do_shim64(adsp, msg);
         break;
     case QEMU_IO_MSG_REG64R:
         break;
     default:
         fprintf(stderr, "unknown register msg %d\n", msg->msg);
         break;
-    }
-}
-
-void adsp_cavs_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
-{
-    struct adsp_io_info *info = adsp->shim;
-    uint32_t active;
-
-    active = info->region[SHIM_ISRD >> 2] & ~(info->region[SHIM_IMRD >> 2]);
-
-    log_text(adsp->log, LOG_IRQ_ACTIVE,
-        "IRQ: from HOST status %x mask %x active %x cmd %x\n",
-        info->region[SHIM_ISRD >> 2],
-        info->region[SHIM_IMRD >> 2], active,
-        info->region[SHIM_IPCX >> 2]);
-
-    if (active) {
-        qemu_mutex_lock_iothread();
-        adsp_set_lvl1_irq(adsp, adsp->desc->ia_irq, 1);
-        qemu_mutex_unlock_iothread();
     }
 }
 
