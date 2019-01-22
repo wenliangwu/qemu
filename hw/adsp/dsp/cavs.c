@@ -255,6 +255,13 @@ static void adsp_pm_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
 {
 }
 
+void adsp_cavs_irq_msg(struct adsp_dev *adsp, struct qemu_io_msg *msg)
+{
+    qemu_mutex_lock_iothread();
+    adsp_set_lvl1_irq(adsp, IRQ_IPC, 1);
+    qemu_mutex_unlock_iothread();
+}
+
 static int bridge_cb(void *data, struct qemu_io_msg *msg)
 {
     struct adsp_dev *adsp = (struct adsp_dev *)data;
@@ -621,13 +628,86 @@ const MemoryRegionOps cavs_irq_io_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
+static uint64_t cavs_ipc_1_5_read(void *opaque, hwaddr addr,
+        unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    switch (addr) {
+    default:
+        break;
+    }
+
+    log_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
+
+    return info->region[addr >> 2];
+}
+
+/* SHIM IO from ADSP */
+static void cavs_ipc_1_5_write(void *opaque, hwaddr addr,
+        uint64_t val, unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+    struct qemu_io_msg_irq irq;
+
+    log_write(adsp->log, space, addr, val, size,
+        info->region[addr >> 2]);
+
+    /* special case registers */
+    switch (addr) {
+    case IPC_DIPCT:
+        /* host to DSP */
+        if (val & IPC_DIPCT_DSPLRST)
+            info->region[addr >> 2] &= ~IPC_DIPCT_DSPLRST;
+    break;
+    case IPC_DIPCI:
+        /* DSP to host */
+        info->region[addr >> 2] = val;
+
+        if (val & IPC_DIPCI_DSPRST) {
+            log_text(adsp->log, LOG_IRQ_BUSY,
+                "irq: send busy interrupt 0x%8.8lx\n", val);
+
+            /* send IRQ to parent */
+            irq.hdr.type = QEMU_IO_TYPE_IRQ;
+            irq.hdr.msg = QEMU_IO_MSG_IRQ;
+            irq.hdr.size = sizeof(irq);
+            irq.irq = 0;
+
+            qemu_io_send_msg(&irq.hdr);
+        }
+        case IPC_DIPCIE:
+            info->region[addr >> 2] = val & ~(0x1 << 31);
+            if (val & IPC_DIPCIE_DONE)
+                info->region[addr >> 2] &= ~IPC_DIPCIE_DONE;
+        break;
+        case IPC_DIPCCTL5:
+             /* assume interrupts are not masked atm */
+             info->region[addr >> 2] = val;
+        break;
+    default:
+        break;
+    }
+}
+
+const MemoryRegionOps cavs_ipc_v1_5_io_ops = {
+    .read = cavs_ipc_1_5_read,
+    .write = cavs_ipc_1_5_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 /* CAVS 1.5 IO devices */
 static struct adsp_reg_space cavs_1_5_io[] = {
         { .name = "cmd", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_5_DSP_CMD_BASE, .size = ADSP_CAVS_1_5_DSP_CMD_SIZE},},
         { .name = "res", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_5_DSP_RES_BASE, .size = ADSP_CAVS_1_5_DSP_RES_SIZE},},
-        { .name = "ipc", .reg_count = 0, .reg = NULL,
+        { .name = "ipc", .reg_count = 0, .reg = NULL, .ops = &cavs_ipc_v1_5_io_ops,
             .desc = {.base = ADSP_CAVS_1_5_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_5_DSP_IPC_HOST_SIZE},},
         { .name = "idc0", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_5_DSP_IPC_DSP_BASE(0), .size = ADSP_CAVS_1_5_DSP_IPC_DSP_SIZE},},
@@ -794,6 +874,100 @@ const MemoryRegionOps cavs1_8_l2m_io_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
+static uint64_t cavs_ipc_1_8_read(void *opaque, hwaddr addr,
+        unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+
+    switch (addr) {
+    default:
+        break;
+    }
+
+    log_read(adsp->log, space, addr, size,
+        info->region[addr >> 2]);
+
+    return info->region[addr >> 2];
+}
+
+/* SHIM IO from ADSP */
+static void cavs_ipc_1_8_write(void *opaque, hwaddr addr,
+        uint64_t val, unsigned size)
+{
+    struct adsp_io_info *info = opaque;
+    struct adsp_dev *adsp = info->adsp;
+    struct adsp_reg_space *space = info->space;
+    struct qemu_io_msg_irq irq;
+
+    log_write(adsp->log, space, addr, val, size,
+        info->region[addr >> 2]);
+
+    /* special case registers */
+    switch (addr) {
+    case IPC_DIPCTDR:
+        /* host to DSP */
+        if (val & IPC_DIPCT_DSPLRST)
+            info->region[addr >> 2] &= ~IPC_DIPCT_DSPLRST;
+    break;
+    case IPC_DIPCTDA:
+        /* DSP to host */
+        info->region[addr >> 2] = val;
+
+        if (val & IPC_DIPCI_DSPRST) {
+            log_text(adsp->log, LOG_IRQ_BUSY,
+                "irq: send done interrupt 0x%8.8lx\n", val);
+
+            /* send IRQ to parent */
+            irq.hdr.type = QEMU_IO_TYPE_IRQ;
+            irq.hdr.msg = QEMU_IO_MSG_IRQ;
+            irq.hdr.size = sizeof(irq);
+            irq.irq = 0;
+
+            qemu_io_send_msg(&irq.hdr);
+        }
+    case IPC_DIPCTDD:
+    case IPC_DIPCIDD:
+    case IPC_DIPCCST:
+        info->region[addr >> 2] = val;
+        break;
+    case IPC_DIPCIDR:
+       /* DSP to host */
+        info->region[addr >> 2] = val;
+
+        if (val & IPC_DIPCI_DSPRST) {
+            log_text(adsp->log, LOG_IRQ_BUSY,
+                "irq: send busy interrupt 0x%8.8lx\n", val);
+
+            /* send IRQ to parent */
+            irq.hdr.type = QEMU_IO_TYPE_IRQ;
+            irq.hdr.msg = QEMU_IO_MSG_IRQ;
+            irq.hdr.size = sizeof(irq);
+            irq.irq = 0;
+
+            qemu_io_send_msg(&irq.hdr);
+        }
+   case IPC_DIPCIDA:
+            info->region[addr >> 2] = val & ~(0x1 << 31);
+            if (val & IPC_DIPCIE_DONE)
+                info->region[addr >> 2] &= ~IPC_DIPCIE_DONE;
+        break;
+    case IPC_DIPCCTL8:
+             /* assume interrupts are not masked atm */
+             info->region[addr >> 2] = val;
+        break;
+    default:
+        break;
+    }
+}
+
+const MemoryRegionOps cavs_ipc_v1_8_io_ops = {
+    .read = cavs_ipc_1_8_read,
+    .write = cavs_ipc_1_8_write,
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
 /* CAVS 1.8 IO devices */
 static struct adsp_reg_space cavs_1_8_io[] = {
         { .name = "cap", .reg_count = 0, .reg = NULL,
@@ -833,7 +1007,7 @@ static struct adsp_reg_space cavs_1_8_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_CMD_BASE, .size = ADSP_CAVS_1_8_DSP_CMD_SIZE},},
         { .name = "dmic", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_DMIC_BASE, .size = ADSP_CAVS_1_8_DSP_DMIC_SIZE},},
-        { .name = "ipc", .reg_count = 0, .reg = NULL,
+        { .name = "ipc", .reg_count = 0, .reg = NULL, .ops = &cavs_ipc_v1_8_io_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_8_DSP_IPC_HOST_SIZE},},
         { .name = "gtw-lout", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_SIZE * 14},},
@@ -957,7 +1131,7 @@ static struct adsp_reg_space cavs_1_8_sue_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_CMD_BASE, .size = ADSP_CAVS_1_8_DSP_CMD_SIZE},},
         { .name = "dmic", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_DMIC_BASE, .size = ADSP_CAVS_1_8_DSP_DMIC_SIZE},},
-        { .name = "ipc", .reg_count = 0, .reg = NULL,
+        { .name = "ipc", .reg_count = 0, .reg = NULL, .ops = &cavs_ipc_v1_8_io_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_8_DSP_IPC_HOST_SIZE},},
         { .name = "gtw-lout", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_SIZE * 14},},

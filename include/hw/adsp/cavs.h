@@ -354,4 +354,28 @@ void cavs_irq_clear(struct adsp_io_info *info, int irq, uint32_t mask);
 void cavs_ext_timer_cb0(void *opaque);
 void cavs_ext_timer_cb1(void *opaque);
 
+/* IPC - v1.5 */
+#define IPC_DIPCT       0x0
+#define IPC_DIPCT_DSPLRST   (0x1 << 31)
+
+#define IPC_DIPCTE       0x4
+#define IPC_DIPCI       0x8
+#define IPC_DIPCI_DSPRST    (0x1 << 31)
+
+#define IPC_DIPCIE       0xc
+#define IPC_DIPCIE_DONE       (0x1 << 30)
+
+#define IPC_DIPCCTL5       0x10
+
+/* IPC v1.8 */
+#define IPC_DIPCTDR     0x0
+#define IPC_DIPCTDA     0x4
+#define IPC_DIPCTDD     0x8
+#define IPC_DIPCIDR     0x10
+#define IPC_DIPCIDA     0x14
+#define IPC_DIPCIDD     0x18
+#define IPC_DIPCCST     0x20
+#define IPC_DIPCCSR     0x24
+#define IPC_DIPCCTL8     0x28
+
 #endif
