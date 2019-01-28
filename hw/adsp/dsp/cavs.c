@@ -37,6 +37,7 @@
 #include "hw/adsp/log.h"
 #include "hw/ssi/ssp.h"
 #include "hw/dma/dw-dma.h"
+#include "hw/dma/hda-dma.h"
 #include "hw/adsp/cavs.h"
 #include "mbox.h"
 #include "cavs.h"
@@ -749,6 +750,14 @@ static struct adsp_reg_space cavs_1_5_io[] = {
         {.name = "shim", .reg_count = ARRAY_SIZE(adsp_bxt_shim_map), .reg = adsp_bxt_shim_map,
            .init = &adsp_cavs_shim_init, .ops = &cavs_shim_ops,
            .desc = {.base = ADSP_CAVS_1_5_DSP_SHIM_BASE, .size = ADSP_CAVS_1_5_SHIM_SIZE},},
+        { .name = "gtw-lout", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
+            .desc = {.base = ADSP_CAVS_1_5_DSP_GTW_LINK_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_5_DSP_GTW_LINK_OUT_STREAM_SIZE * 14},},
+        { .name = "gtw-lin", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
+            .desc = {.base = ADSP_CAVS_1_5_DSP_GTW_LINK_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_5_DSP_GTW_LINK_IN_STREAM_SIZE * 14},},
+        { .name = "gtw-hout", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
+            .desc = {.base = ADSP_CAVS_1_5_DSP_GTW_HOST_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_5_DSP_GTW_HOST_OUT_STREAM_SIZE * 14},},
+        { .name = "gtw-hin", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
+            .desc = {.base = ADSP_CAVS_1_5_DSP_GTW_HOST_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_5_DSP_GTW_HOST_IN_STREAM_SIZE * 14},},
 };
 
 static struct adsp_mem_desc cavs_1_5_mem[] = {
@@ -1009,13 +1018,13 @@ static struct adsp_reg_space cavs_1_8_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_DMIC_BASE, .size = ADSP_CAVS_1_8_DSP_DMIC_SIZE},},
         { .name = "ipc", .reg_count = 0, .reg = NULL, .ops = &cavs_ipc_v1_8_io_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_8_DSP_IPC_HOST_SIZE},},
-        { .name = "gtw-lout", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-lout", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_SIZE * 14},},
-        { .name = "gtw-lin", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-lin", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_IN_STREAM_SIZE * 14},},
-        { .name = "gtw-hout", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-hout", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_HOST_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_HOST_OUT_STREAM_SIZE * 14},},
-        { .name = "gtw-hin", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-hin", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_HOST_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_HOST_IN_STREAM_SIZE * 14},},
         { .name = "cl", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_BASE, .size = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_SIZE},},
@@ -1133,13 +1142,13 @@ static struct adsp_reg_space cavs_1_8_sue_io[] = {
             .desc = {.base = ADSP_CAVS_1_8_DSP_DMIC_BASE, .size = ADSP_CAVS_1_8_DSP_DMIC_SIZE},},
         { .name = "ipc", .reg_count = 0, .reg = NULL, .ops = &cavs_ipc_v1_8_io_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_IPC_HOST_BASE, .size = ADSP_CAVS_1_8_DSP_IPC_HOST_SIZE},},
-        { .name = "gtw-lout", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-lout", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_OUT_STREAM_SIZE * 14},},
-        { .name = "gtw-lin", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-lin", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_LINK_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_LINK_IN_STREAM_SIZE * 14},},
-        { .name = "gtw-hout", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-hout", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_HOST_OUT_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_HOST_OUT_STREAM_SIZE * 14},},
-        { .name = "gtw-hin", .reg_count = 0, .reg = NULL,
+        { .name = "gtw-hin", .reg_count = 0, .reg = NULL, .init = hda_dma_init_dev, .ops = &hda_dmac_ops,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_HOST_IN_STREAM_BASE(0), .size = ADSP_CAVS_1_8_DSP_GTW_HOST_IN_STREAM_SIZE * 14},},
         { .name = "cl", .reg_count = 0, .reg = NULL,
             .desc = {.base = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_BASE, .size = ADSP_CAVS_1_8_DSP_GTW_CODE_LDR_SIZE},},
