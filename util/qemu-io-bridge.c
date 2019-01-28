@@ -170,13 +170,15 @@ static int mq_init(const char *name, struct io_bridge *io)
 
     if (role == ROLE_PARENT) {
 
+        /* Host */
+
         sprintf(io->parent.thread_name, "io-bridge-%s", name);
         io->io_thread = g_thread_new(io->parent.thread_name,
             parent_reader_thread, io);
 
         /* parent Rx Q */
         sprintf(io->parent.mq_name, "/qemu-io-parent-%s", name);
-        io->parent.mqdes = mq_open(io->parent.mq_name, O_RDONLY | O_CREAT,
+        io->parent.mqdes = mq_open(io->parent.mq_name, O_RDONLY,
             0664, &io->parent.mqattr);
         if (io->parent.mqdes < 0) {
             fprintf(stderr, "failed to open parent Rx queue %d\n", -errno);
@@ -185,7 +187,7 @@ static int mq_init(const char *name, struct io_bridge *io)
 
         /* parent Tx Q */
         sprintf(io->child.mq_name, "/qemu-io-child-%s", name);
-        io->child.mqdes = mq_open(io->child.mq_name, O_WRONLY | O_CREAT,
+        io->child.mqdes = mq_open(io->child.mq_name, O_WRONLY,
             0664, &io->child.mqattr);
         if (io->child.mqdes < 0) {
             fprintf(stderr, "failed to open parent Tx queue %d\n", -errno);
@@ -194,12 +196,15 @@ static int mq_init(const char *name, struct io_bridge *io)
 
     } else {
 
+        /* DSP */
+
         sprintf(io->child.thread_name, "io-bridge-%s", name);
         io->io_thread = g_thread_new(io->child.thread_name,
             child_reader_thread, io);
 
         /* child Rx Q */
         sprintf(io->child.mq_name, "/qemu-io-child-%s", name);
+        mq_unlink(io->child.mq_name);
         io->child.mqdes = mq_open(io->child.mq_name, O_RDONLY | O_CREAT,
             0664, &io->child.mqattr);
         if (io->child.mqdes < 0) {
@@ -209,6 +214,7 @@ static int mq_init(const char *name, struct io_bridge *io)
 
         /* child Tx Q */
         sprintf(io->parent.mq_name, "/qemu-io-parent-%s", name);
+        mq_unlink(io->parent.mq_name);
         io->parent.mqdes = mq_open(io->parent.mq_name, O_WRONLY | O_CREAT,
             0664, &io->parent.mqattr);
         if (io->parent.mqdes < 0) {
