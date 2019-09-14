@@ -165,43 +165,6 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     return adsp;
 }
 
-static uint64_t io_read(void *opaque, hwaddr addr,
-        unsigned size)
-{
-    struct adsp_io_info *info = opaque;
-    struct adsp_dev *adsp = info->adsp;
-    struct adsp_reg_space *space = info->space;
-
-    log_read(adsp->log, space, addr, size,
-        info->region[addr >> 2]);
-
-    return info->region[addr >> 2];
-}
-
-/* SHIM IO from ADSP */
-static void io_write(void *opaque, hwaddr addr,
-        uint64_t val, unsigned size)
-{
-    struct adsp_io_info *info = opaque;
-    struct adsp_dev *adsp = info->adsp;
-    struct adsp_reg_space *space = info->space;
-
-    info->region[addr >> 2] = val;
-
-    /* omit 0 writes as it fills mbox log */
-    if (val == 0)
-        return;
-
-    log_write(adsp->log, space, addr, val, size,
-         info->region[addr >> 2]);
-}
-
-static const MemoryRegionOps mbox_io_ops = {
-    .read = io_read,
-    .write = io_write,
-    .endianness = DEVICE_NATIVE_ENDIAN,
-};
-
 static struct adsp_mem_desc hsw_mem[] = {
     {.name = "iram", .base = ADSP_HSW_DSP_IRAM_BASE,
         .size = ADSP_HSW_IRAM_SIZE},
@@ -229,9 +192,6 @@ static struct adsp_reg_space hsw_io[] = {
     { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
         .reg = adsp_hsw_shim_map, .init = &adsp_bdw_shim_init, .ops = &hsw_shim_ops,
         .desc = {.base = ADSP_HSW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},},
-    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map, .ops = &mbox_io_ops,
-        .desc = {.base = ADSP_HSW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
 /* hardware memory map - TODO: update MBOX from BDW */
@@ -278,9 +238,6 @@ static struct adsp_reg_space bdw_io[] = {
     { .name = "shim", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
         .reg = adsp_hsw_shim_map, .init = &adsp_bdw_shim_init, .ops = &hsw_shim_ops,
         .desc = {.base = ADSP_BDW_DSP_SHIM_BASE, .size = ADSP_HSW_SHIM_SIZE},},
-    { .name = "mbox", .reg_count = ARRAY_SIZE(adsp_mbox_map),
-        .reg = adsp_mbox_map, .ops = &mbox_io_ops,
-        .desc = {.base = ADSP_BDW_DSP_MAILBOX_BASE, .size = ADSP_MAILBOX_SIZE},},
 };
 
 /* hardware memory map - TODO: update MBOX from BDW */
