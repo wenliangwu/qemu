@@ -682,6 +682,7 @@ static void cavs_ipc_1_5_write(void *opaque, hwaddr addr,
 
             qemu_io_send_msg(&irq.hdr);
         }
+	break;
         case IPC_DIPCIE:
             info->region[addr >> 2] = val & ~(0x1 << 31);
             if (val & IPC_DIPCIE_DONE)
@@ -919,7 +920,7 @@ static void cavs_ipc_1_8_write(void *opaque, hwaddr addr,
         /* host to DSP */
         if (val & IPC_DIPCT_DSPLRST)
             info->region[addr >> 2] &= ~IPC_DIPCT_DSPLRST;
-    break;
+        break;
     case IPC_DIPCTDA:
         /* DSP to host */
         info->region[addr >> 2] = val;
@@ -936,6 +937,7 @@ static void cavs_ipc_1_8_write(void *opaque, hwaddr addr,
 
             qemu_io_send_msg(&irq.hdr);
         }
+	break;
     case IPC_DIPCTDD:
     case IPC_DIPCIDD:
     case IPC_DIPCCST:
@@ -957,6 +959,7 @@ static void cavs_ipc_1_8_write(void *opaque, hwaddr addr,
 
             qemu_io_send_msg(&irq.hdr);
         }
+	break;
    case IPC_DIPCIDA:
             info->region[addr >> 2] = val & ~(0x1 << 31);
             if (val & IPC_DIPCIE_DONE)
