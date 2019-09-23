@@ -526,6 +526,7 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(2) >> 2] =
                 (~info->region[ILMC(2) >> 2]) & info->region[ILRSD(2) >> 2];
 
+            /* clear IRQ if no other IRQ left */
             if (!info->region[ILSC(2) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL2, 0);
         }
@@ -538,6 +539,7 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(3) >> 2] =
                 (~info->region[ILMC(3) >> 2]) & info->region[ILRSD(3) >> 2];
 
+            /* clear IRQ if no other IRQ left */
             if (!info->region[ILSC(3) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL3, 0);
         }
@@ -550,6 +552,7 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(4) >> 2] =
                 (~info->region[ILMC(4) >> 2]) & info->region[ILRSD(4) >> 2];
 
+            /* clear IRQ if no other IRQ left */
             if (!info->region[ILSC(4) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL4, 0);
         }
@@ -562,6 +565,7 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(5) >> 2] =
                 (~info->region[ILMC(5) >> 2]) & info->region[ILRSD(5) >> 2];
 
+            /* clear IRQ if no other IRQ left */
             if (!info->region[ILSC(5) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL5, 0);
         }
@@ -574,7 +578,8 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(2) >> 2] =
                 (~info->region[ILMC(2) >> 2]) & info->region[ILRSD(2) >> 2];
 
-            if (!info->region[ILSC(2) >> 2])
+            /* generate an IRQ if it was masked */
+            if (info->region[ILSC(2) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL2, 1);
         }
         break;
@@ -586,7 +591,8 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(3) >> 2] =
                 (~info->region[ILMC(3) >> 2]) & info->region[ILRSD(3) >> 2];
 
-            if (!info->region[ILSC(3) >> 2])
+            /* generate an IRQ if it was masked */
+            if (info->region[ILSC(3) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL3, 1);
         }
         break;
@@ -598,7 +604,8 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(4) >> 2] =
                 (~info->region[ILMC(4) >> 2]) & info->region[ILRSD(4) >> 2];
 
-            if (!info->region[ILSC(4) >> 2])
+            /* generate an IRQ if it was masked */
+            if (info->region[ILSC(4) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL4, 1);
         }
         break;
@@ -611,7 +618,8 @@ static void cavs_irq_write(void *opaque, hwaddr addr,
             info->region[ILSC(5) >> 2] =
                 (~info->region[ILMC(5) >> 2]) & info->region[ILRSD(5) >> 2];
 
-            if (!info->region[ILSC(5) >> 2])
+            /* generate an IRQ if it was masked */
+            if (info->region[ILSC(5) >> 2])
                  adsp_set_lvl1_irq(adsp, IRQ_NUM_EXT_LEVEL5, 1);
         }
         break;
