@@ -39,16 +39,17 @@
 static uint64_t cavs_set_time(struct adsp_dev *adsp, struct adsp_io_info *info)
 {
 	uint64_t time = (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->timer[0].start);
+	uint64_t ticks = time * adsp->timer[0].clk_kHz * 1000 / ( 1000 * 1000 * 1000 );
 
-	info->region[(SHIM_DSPWC + 4) >> 2] = (uint32_t)(time >> 32);
-	info->region[(SHIM_DSPWC + 0) >> 2] = (uint32_t)(time & 0xffffffff);
+	info->region[(SHIM_DSPWC + 4) >> 2] = (uint32_t)(ticks >> 32);
+	info->region[(SHIM_DSPWC + 0) >> 2] = (uint32_t)(ticks & 0xffffffff);
 
 	return time;
 }
 
 static void rearm_ext_timer0(struct adsp_dev *adsp,struct adsp_io_info *info)
 {
-    uint64_t wake = ((uint64_t)(info->region[(SHIM_DSPWCTT0C + 4)>> 2]) << 32) | 
+    uint64_t wake = ((uint64_t)(info->region[(SHIM_DSPWCTT0C + 4)>> 2]) << 32) |
 		info->region[(SHIM_DSPWCTT0C + 0)>> 2];
 
     cavs_set_time(adsp, info);
