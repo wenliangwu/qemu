@@ -1094,6 +1094,39 @@ static const struct adsp_desc cavs_1_8_dsp_desc = {
     .ops = &cavs_1_8_ops,
 };
 
+/* Tigerlake */
+
+static struct adsp_mem_desc cavs_1_8_mem_tgl[] = {
+    {.name = "l2-sram", .base = ADSP_CAVS_1_8_DSP_SRAM_BASE,
+        .size = ADSP_CAVS_1_8_DSP_SRAM_SIZE},
+    {.name = "hp-sram", .base = ADSP_CAVS_1_8_DSP_HP_SRAM_BASE,
+        .size = ADSP_CAVS_1_8_DSP_HP_SRAM_SIZE, .alias = ADSP_CAVS_1_5_DSP_UNCACHE_BASE},
+    {.name = "lp-sram", .base = ADSP_CAVS_1_8_DSP_LP_SRAM_BASE,
+        .size = ADSP_CAVS_1_8_DSP_LP_SRAM_SIZE},
+    {.name = "imr", .base = ADSP_CAVS_1_8_DSP_IMR_BASE,
+        .size = ADSP_CAVS_1_8_DSP_IMR_SIZE},
+    {.name = "rom", .base = ADSP_CAVS_TGL_DSP_ROM_BASE,
+        .size = ADSP_CAVS_DSP_ROM_SIZE},
+};
+
+static const struct adsp_desc cavs_1_8_dsp_tgl_desc = {
+    .ia_irq = IRQ_NUM_EXT_IA,
+    .ext_timer_irq = IRQ_NUM_EXT_TIMER,
+
+    .imr_boot_ldr_offset = ADSP_CAVS_1_8_DSP_IMR_MAN_OFFSET,
+
+    .num_mem = ARRAY_SIZE(cavs_1_8_mem_tgl),
+    .mem_region = cavs_1_8_mem_tgl,
+
+    .num_io = ARRAY_SIZE(cavs_1_8_io),
+    .io_dev = cavs_1_8_io,
+
+    .sram_base = ADSP_CAVS_1_8_DSP_HP_SRAM_BASE,
+    .imr_base = ADSP_CAVS_1_8_DSP_IMR_BASE,
+
+    .ops = &cavs_1_8_ops,
+};
+
 /* Sue creek */
 static struct adsp_mem_desc cavs_1_8_sue_mem[] = {
     {.name = "l2-sram", .base = ADSP_CAVS_1_8_DSP_SRAM_BASE,
@@ -1326,7 +1359,7 @@ DEFINE_MACHINE("adsp_icl", xtensa_icl_machine_init)
 
 static void tgl_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_8_dsp_desc, machine, "tgl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_8_dsp_tgl_desc, machine, "tgl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
 }
 
 static void xtensa_tgl_machine_init(MachineClass *mc)

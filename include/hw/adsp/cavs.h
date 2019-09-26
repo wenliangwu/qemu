@@ -45,6 +45,7 @@
  * ROM
  */
 #define ADSP_CAVS_DSP_ROM_BASE     0xBEFE0000
+#define ADSP_CAVS_TGL_DSP_ROM_BASE     0x9F180000
 #define ADSP_CAVS_DSP_ROM_SIZE         0x0002000
 
 /*
