@@ -1323,3 +1323,19 @@ static void xtensa_icl_machine_init(MachineClass *mc)
 }
 
 DEFINE_MACHINE("adsp_icl", xtensa_icl_machine_init)
+
+static void tgl_adsp_init(MachineState *machine)
+{
+    adsp_init(&cavs_1_8_dsp_desc, machine, "tgl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+}
+
+static void xtensa_tgl_machine_init(MachineClass *mc)
+{
+    mc->desc = "Tigerlake HiFi3";
+    mc->is_default = true;
+    mc->init = tgl_adsp_init;
+    mc->max_cpus = 4;
+    mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
+}
+
+DEFINE_MACHINE("adsp_tgl", xtensa_tgl_machine_init)

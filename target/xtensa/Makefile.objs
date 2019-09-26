@@ -7,6 +7,7 @@ obj-y += core-haswell.o
 obj-y += core-broxton.o
 obj-y += core-suecreek.o
 obj-y += core-cannonlake.o
+obj-y += core-tigerlake.o
 obj-y += core-icelake.o
 obj-y += core-hikey.o
 obj-y += core-fsf.o
