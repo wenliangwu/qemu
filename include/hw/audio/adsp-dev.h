@@ -58,6 +58,7 @@ struct adsp_dev {
 	const char *cpu_model;
 	const char *kernel_filename;
         const char *rom_filename;
+	uint32_t clk_kHz;
 
 	/* logging options */
 	struct adsp_log *log;
