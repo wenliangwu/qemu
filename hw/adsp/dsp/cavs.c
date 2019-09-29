@@ -357,7 +357,7 @@ static void copy_man_to_imr(const struct adsp_desc *board, struct adsp_dev *adsp
 
 static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     MachineState *machine, const char *name, int copy_modules,
-    uint32_t exec_addr, uint32_t imr_addr)
+    uint32_t exec_addr, uint32_t imr_addr, uint32_t clk_kHz)
 {
     struct adsp_dev *adsp;
     struct adsp_mem_desc *mem;
@@ -375,6 +375,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     adsp->kernel_filename = qemu_opt_get(adsp->machine_opts, "kernel");
     adsp->rom_filename = qemu_opt_get(adsp->machine_opts, "rom");
     adsp->ops = board->ops;
+    adsp->clk_kHz = clk_kHz;
 
     /* initialise CPU */
     if (!adsp->cpu_model) {
@@ -489,9 +490,9 @@ static void cavs_irq_init(struct adsp_dev *adsp, MemoryRegion *parent,
         struct adsp_io_info *info)
 {
     adsp->timer[0].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb0, info);
-    adsp->timer[0].clk_kHz = 2500;
+    adsp->timer[0].clk_kHz = adsp->clk_kHz;
     adsp->timer[1].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb1, info);
-    adsp->timer[1].clk_kHz = 2500;
+    adsp->timer[1].clk_kHz = adsp->clk_kHz;
     adsp->timer[0].info = info;
     adsp->timer[1].info = info;
     adsp->timer[0].start = adsp->timer[1].start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
@@ -1262,7 +1263,7 @@ static const struct adsp_desc cavs_1_8_sue_dsp_desc = {
 
 static void bxt_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_5p_dsp_desc, machine, "bxt", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_5p_dsp_desc, machine, "bxt", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE, 19200);
 }
 
 static void xtensa_bxt_machine_init(MachineClass *mc)
@@ -1278,7 +1279,7 @@ DEFINE_MACHINE("adsp_bxt", xtensa_bxt_machine_init)
 
 static void skl_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_5_dsp_desc, machine, "skl", 1, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_5_dsp_desc, machine, "skl", 1, 0, ADSP_CAVS_1_8_DSP_IMR_BASE, 19200);
 }
 
 static void xtensa_skl_machine_init(MachineClass *mc)
@@ -1294,7 +1295,7 @@ DEFINE_MACHINE("adsp_skl", xtensa_skl_machine_init)
 
 static void kbl_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_5_dsp_desc, machine, "kbl", 1, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_5_dsp_desc, machine, "kbl", 1, 0, ADSP_CAVS_1_8_DSP_IMR_BASE, 19200);
 }
 
 static void xtensa_kbl_machine_init(MachineClass *mc)
@@ -1311,7 +1312,7 @@ DEFINE_MACHINE("adsp_kbl", xtensa_kbl_machine_init)
 static void sue_adsp_init(MachineState *machine)
 {
     adsp_init(&cavs_1_8_sue_dsp_desc, machine, "sue", 0,
-        ADSP_CAVS_1_8_DSP_HP_SRAM_BASE, ADSP_CAVS_1_8_DSP_IMR_BASE);
+        ADSP_CAVS_1_8_DSP_HP_SRAM_BASE, ADSP_CAVS_1_8_DSP_IMR_BASE, 19200);
 }
 
 static void xtensa_sue_machine_init(MachineClass *mc)
@@ -1327,7 +1328,7 @@ DEFINE_MACHINE("adsp_sue", xtensa_sue_machine_init)
 
 static void cnl_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_8_dsp_desc, machine, "cnl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_8_dsp_desc, machine, "cnl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE, 24000);
 }
 
 static void xtensa_cnl_machine_init(MachineClass *mc)
@@ -1343,7 +1344,7 @@ DEFINE_MACHINE("adsp_cnl", xtensa_cnl_machine_init)
 
 static void icl_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_8_dsp_desc, machine, "icl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_8_dsp_desc, machine, "icl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE, 38400);
 }
 
 static void xtensa_icl_machine_init(MachineClass *mc)
@@ -1359,7 +1360,7 @@ DEFINE_MACHINE("adsp_icl", xtensa_icl_machine_init)
 
 static void tgl_adsp_init(MachineState *machine)
 {
-    adsp_init(&cavs_1_8_dsp_tgl_desc, machine, "tgl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE);
+    adsp_init(&cavs_1_8_dsp_tgl_desc, machine, "tgl", 0, 0, ADSP_CAVS_1_8_DSP_IMR_BASE, 38400);
 }
 
 static void xtensa_tgl_machine_init(MachineClass *mc)
