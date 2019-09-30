@@ -121,17 +121,17 @@ static uint64_t shim_read(void *opaque, hwaddr addr,
     struct adsp_dev *adsp = info->adsp;
     struct adsp_reg_space *space = info->space;
 
+    switch (addr) {
+    case SHIM_DSPWC:
+        cavs_set_time(adsp, info);
+    case SHIM_DSPWC + 4:
+        break;
+    default:
+        break;
+    }
+
     log_read(adsp->log, space, addr, size,
         info->region[addr >> 2]);
-
-     switch (addr) {
-     case SHIM_DSPWC:
-	cavs_set_time(adsp, info);
-     case SHIM_DSPWC + 4:
-         break;
-     default:
-         break;
-    }
 
     return info->region[addr >> 2];
 }
