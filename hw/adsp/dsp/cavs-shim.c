@@ -156,6 +156,8 @@ static void shim_write(void *opaque, hwaddr addr,
     struct adsp_io_info *info = opaque;
     struct adsp_dev *adsp = info->adsp;
     struct adsp_reg_space *space = info->space;
+    uint64_t waketicks = ((uint64_t)(info->region[(SHIM_DSPWCTT0C + 4)>> 2]) << 32) |
+		info->region[(SHIM_DSPWCTT0C + 0)>> 2];
 
     log_write(adsp->log, space, addr, val, size,
         info->region[addr >> 2]);
@@ -165,13 +167,28 @@ static void shim_write(void *opaque, hwaddr addr,
     case SHIM_DSPWC:
         break;
     case SHIM_DSPWCTTCS:
+	/* set timer only in valid */
         if ((val & SHIM_DSPWCTTCS_T0A) &&
-            !(info->region[addr >> 2] & SHIM_DSPWCTTCS_T0A))
+            waketicks ) {
             rearm_ext_timer0(adsp, info);
+            info->region[addr >> 2] |= val;
+	}
         if ((val & SHIM_DSPWCTTCS_T1A) &&
-            !(info->region[addr >> 2] & SHIM_DSPWCTTCS_T1A))
+            waketicks ) {
             rearm_ext_timer1(adsp, info);
-        info->region[addr >> 2] = val;
+            info->region[addr >> 2] |= val;
+	}
+	/* clear IRQ */
+        if ((val & SHIM_DSPWCTTCS_T0T) &&
+            (info->region[addr >> 2] & SHIM_DSPWCTTCS_T0T)) {
+            cavs_irq_clear(adsp->timer[0].info, IRQ_DWCT0, 0);
+            info->region[addr >> 2] &= ~val;
+	}
+        if ((val & SHIM_DSPWCTTCS_T1T) &&
+            (info->region[addr >> 2] & SHIM_DSPWCTTCS_T1T)) {
+            cavs_irq_clear(adsp->timer[1].info, IRQ_DWCT1, 0);
+            info->region[addr >> 2] &= ~val;
+	}
         break;
     case SHIM_DSPWCTT0C:
         info->region[addr >> 2] = val;
