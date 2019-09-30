@@ -269,4 +269,9 @@ void adsp_cavs_shim_init(struct adsp_dev *adsp, MemoryRegion *parent,
     shim_reset(info);
     adsp->shim = info;
     info->region[0x94 >> 2] = 0x00000080;
+    adsp->timer[0].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb0, info);
+    adsp->timer[0].clk_kHz = adsp->clk_kHz;
+    adsp->timer[1].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb1, info);
+    adsp->timer[1].clk_kHz = adsp->clk_kHz;
+    adsp->timer[0].start = adsp->timer[1].start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
 }

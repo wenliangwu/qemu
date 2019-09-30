@@ -489,13 +489,8 @@ out:
 static void cavs_irq_init(struct adsp_dev *adsp, MemoryRegion *parent,
         struct adsp_io_info *info)
 {
-    adsp->timer[0].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb0, info);
-    adsp->timer[0].clk_kHz = adsp->clk_kHz;
-    adsp->timer[1].timer = timer_new_ns(QEMU_CLOCK_VIRTUAL, &cavs_ext_timer_cb1, info);
-    adsp->timer[1].clk_kHz = adsp->clk_kHz;
     adsp->timer[0].info = info;
     adsp->timer[1].info = info;
-    adsp->timer[0].start = adsp->timer[1].start = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL);
 }
 
 static uint64_t cavs_irq_read(void *opaque, hwaddr addr,
