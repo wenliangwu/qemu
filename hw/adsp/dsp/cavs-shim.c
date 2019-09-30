@@ -59,32 +59,35 @@ static uint64_t cavs_set_time(struct adsp_dev *adsp, struct adsp_io_info *info)
 
 static void rearm_ext_timer0(struct adsp_dev *adsp,struct adsp_io_info *info)
 {
-    uint64_t wake = ((uint64_t)(info->region[(SHIM_DSPWCTT0C + 4)>> 2]) << 32) |
+    uint64_t waketicks = ((uint64_t)(info->region[(SHIM_DSPWCTT0C + 4)>> 2]) << 32) |
 		info->region[(SHIM_DSPWCTT0C + 0)>> 2];
 
     cavs_set_time(adsp, info);
 
-    /* never wakes ups if wake == 0 */
-    if (wake == 0)
-        wake = 10000000;
 
-    timer_mod(adsp->timer[0].timer,
-        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + wake * 100);
+    uint64_t waketime = ticks2ns(waketicks, adsp->timer[0].clk_kHz) + adsp->timer[0].start;
+
+    if (waketime < qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL))
+        timer_mod(adsp->timer[0].timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 10000);
+    else {
+        timer_mod(adsp->timer[0].timer, waketime);
+    }
 }
 
 static void rearm_ext_timer1(struct adsp_dev *adsp,struct adsp_io_info *info)
 {
-     uint64_t wake = ((uint64_t)(info->region[SHIM_DSPWCTT1C >> 2]) << 32) | 
-		info->region[(SHIM_DSPWCTT1C + 4)>> 2];
+    uint64_t waketicks = ((uint64_t)(info->region[(SHIM_DSPWCTT1C + 4)>> 2]) << 32) |
+		info->region[(SHIM_DSPWCTT1C + 0)>> 2];
 
     cavs_set_time(adsp, info);
 
-    /* never wakes ups if wake == 0 */
-    if (wake == 0)
-        wake = 10000000;
+    uint64_t waketime = ticks2ns(waketicks, adsp->timer[0].clk_kHz) + adsp->timer[0].start;
 
-    timer_mod(adsp->timer[1].timer,
-        qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + wake * 100);
+    if (waketime < qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL))
+        timer_mod(adsp->timer[1].timer, qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) + 10);
+    else {
+        timer_mod(adsp->timer[1].timer, waketime);
+    }
 }
 
 void cavs_ext_timer_cb0(void *opaque)
