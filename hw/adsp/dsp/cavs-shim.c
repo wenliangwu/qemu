@@ -83,9 +83,9 @@ void cavs_ext_timer_cb0(void *opaque)
     struct adsp_dev *adsp = info->adsp;
 
     /* clear T0A */
-    info->region[SHIM_DSPWCTTCS] &= ~SHIM_DSPWCTTCS_T0A;
+    info->region[SHIM_DSPWCTTCS >> 2] &= ~SHIM_DSPWCTTCS_T0A;
     /* set T0T */
-    info->region[SHIM_DSPWCTTCS] |= SHIM_DSPWCTTCS_T0T;
+    info->region[SHIM_DSPWCTTCS >> 2] |= SHIM_DSPWCTTCS_T0T;
 
     /* Interrupt may be generated if IL2MDx.FCT0 bit is set. */
     cavs_irq_set(adsp->timer[0].info, IRQ_DWCT0, 0);
@@ -97,9 +97,9 @@ void cavs_ext_timer_cb1(void *opaque)
     struct adsp_dev *adsp = info->adsp;
 
      /* clear T0A */
-    info->region[SHIM_DSPWCTTCS] &= ~SHIM_DSPWCTTCS_T1A;
+    info->region[SHIM_DSPWCTTCS >> 2] &= ~SHIM_DSPWCTTCS_T1A;
     /* set T0T */
-    info->region[SHIM_DSPWCTTCS] |= SHIM_DSPWCTTCS_T1T;
+    info->region[SHIM_DSPWCTTCS >> 2] |= SHIM_DSPWCTTCS_T1T;
 
     /* Interrupt may be generated if IL2MDx.FCT1 bit is set. */
     cavs_irq_set(adsp->timer[1].info, IRQ_DWCT1, 0);
