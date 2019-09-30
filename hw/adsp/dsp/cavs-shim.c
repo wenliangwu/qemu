@@ -49,7 +49,7 @@ static uint64_t ticks2ns(uint64_t ticks, uint64_t clk_kHz)
 static uint64_t cavs_set_time(struct adsp_dev *adsp, struct adsp_io_info *info)
 {
 	uint64_t time = (qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - adsp->timer[0].start);
-	uint64_t ticks = time * adsp->timer[0].clk_kHz * 1000 / ( 1000 * 1000 * 1000 );
+	uint64_t ticks = ns2ticks(time, adsp->timer[0].clk_kHz);
 
 	info->region[(SHIM_DSPWC + 4) >> 2] = (uint32_t)(ticks >> 32);
 	info->region[(SHIM_DSPWC + 0) >> 2] = (uint32_t)(ticks & 0xffffffff);
