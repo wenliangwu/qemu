@@ -20,8 +20,8 @@
 #include "qemu/osdep.h"
 #include "hw/hw.h"
 #include "hw/pci/pci.h"
-#include "intel-hda.h"
-#include "intel-hda-defs.h"
+#include "hw/audio/intel-hda.h"
+#include "hw/audio/intel-hda-defs.h"
 #include "audio/audio.h"
 
 /* -------------------------------------------------------------------------- */

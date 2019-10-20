@@ -137,7 +137,7 @@ static void build_acpi_bdw_device(Aml *table)
     Aml *dev = aml_device("LPED");
     Aml *zero = aml_int(0);
     Aml *one = aml_int(1);
-    printf("%s %d\n", __func__, __LINE__);
+
     /* device info */
     aml_append(dev, aml_name_decl("_ADR", zero));
     aml_append(dev, aml_name_decl("_HID", aml_string("INT3438")));
