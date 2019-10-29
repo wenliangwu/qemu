@@ -171,6 +171,12 @@
 #define SHIM_DSPWCTT0C      0x30
 #define SHIM_DSPWCTT1C      0x38
 
+/** \brief Clock control */
+#define SHIM_CLKCTL		0x78
+
+/** \brief Clock status */
+#define SHIM_CLKSTS		0x7C
+
 /* IRQ registers for core 0 */
 #define ILMSD(x)    (0x0 + 0x10 * (x - 2)) /* mask set - W1S */
 #define ILMCD(x)   (0x4 + 0x10 * (x - 2)) /* mask clear - W1C */

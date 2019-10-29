@@ -201,6 +201,10 @@ static void shim_write(void *opaque, hwaddr addr,
     case SHIM_DSPWCTT1C + 4:
         info->region[addr >> 2] = val;
         break;
+    case SHIM_CLKCTL:
+	info->region[addr >> 2] = val;
+	info->region[SHIM_CLKSTS >> 2] = val;
+	break;
     default:
         break;
     }
