@@ -1271,6 +1271,7 @@ static void xtensa_bxt_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = bxt_adsp_init;
     mc->max_cpus = 2;
+    mc->default_cpus = 2;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
@@ -1287,6 +1288,7 @@ static void xtensa_skl_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = skl_adsp_init;
     mc->max_cpus = 2;
+    mc->default_cpus = 2;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
@@ -1303,6 +1305,7 @@ static void xtensa_kbl_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = kbl_adsp_init;
     mc->max_cpus = 2;
+    mc->default_cpus = 2;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
@@ -1320,6 +1323,7 @@ static void xtensa_sue_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = sue_adsp_init;
     mc->max_cpus = 2;
+    mc->default_cpus = 2;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
@@ -1336,6 +1340,7 @@ static void xtensa_cnl_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = cnl_adsp_init;
     mc->max_cpus = 4;
+    mc->default_cpus = 4;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
@@ -1352,6 +1357,7 @@ static void xtensa_icl_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = icl_adsp_init;
     mc->max_cpus = 4;
+    mc->default_cpus = 4;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
@@ -1368,6 +1374,7 @@ static void xtensa_tgl_machine_init(MachineClass *mc)
     mc->is_default = true;
     mc->init = tgl_adsp_init;
     mc->max_cpus = 4;
+    mc->default_cpus = 4;
     mc->default_cpu_type = XTENSA_DEFAULT_CPU_TYPE;
 }
 
