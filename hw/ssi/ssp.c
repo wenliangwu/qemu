@@ -176,7 +176,7 @@ void adsp_ssp_init(struct adsp_dev *adsp, MemoryRegion *parent,
     ssp->rx.level = 0;
     sprintf(ssp->name, "%s.io", info->space->name);
 
-    ssp->log = log_init(NULL);
+    ssp->log = log_init(NULL, NULL);
     info->private = ssp;
     ssp_reset(info);
     _ssp[info->io_dev] = ssp;

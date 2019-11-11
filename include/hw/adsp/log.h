@@ -111,6 +111,7 @@ struct adsp_log {
 	FILE *file;
 	time_t timestamp;	/* last trace timestamp */
 	time_t tv_sec_start;	/* start of tv_secs */
+	int level;
 };
 
 #define BYT_SHIM_REGS   25
@@ -164,6 +165,9 @@ static inline void log_read(struct adsp_log *log,
 	const struct adsp_reg_desc *reg = space->reg;
 	int i;
 
+	if (!log->level)
+		return;
+
 	/* TODO: have a faster direct array mapping to register to addr */
 	for (i = 0; i < space->reg_count; i++) {
 
@@ -191,6 +195,9 @@ static inline void log_write(struct adsp_log *log,
 {
 	const struct adsp_reg_desc *reg = space->reg;
 	int i;
+
+	if (!log->level)
+		return;
 
 	/* TODO: have a faster direct array mapping to register to addr */
 	for (i = 0; i < space->reg_count; i++) {
@@ -229,6 +236,9 @@ static inline void log_area_read(struct adsp_log *log,
 	const struct adsp_reg_desc *reg = space->reg;
 	int i;
 
+	if (!log->level)
+		return;
+
 	/* TODO: have a faster direct array mapping to register to addr */
 	for (i = 0; i < space->reg_count; i++) {
 
@@ -253,6 +263,9 @@ static inline void log_area_write(struct adsp_log *log,
 	uint32_t class;
 	const char *trace;
 	int i;
+
+	if (!log->level)
+		return;
 
 	/* ignore writes of 0 atm - used in mbox clear and init */
 	if (val == 0)// && addr >= 0xc00)
@@ -336,6 +349,6 @@ static inline void log_area_write(struct adsp_log *log,
 #define log_text(log, enable fmt, ...)
 #endif
 
-struct adsp_log *log_init(const char *log_name);
+struct adsp_log *log_init(const char *log_name, const char *log_args);
 
 #endif

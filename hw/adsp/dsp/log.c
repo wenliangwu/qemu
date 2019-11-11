@@ -37,7 +37,7 @@
 #include "hw/adsp/shim.h"
 #include "hw/adsp/log.h"
 
-struct adsp_log *log_init(const char *log_name)
+struct adsp_log *log_init(const char *log_name, const char *args)
 {
     struct adsp_log *log;
     struct timeval tv;
@@ -57,6 +57,10 @@ struct adsp_log *log_init(const char *log_name)
 
     gettimeofday(&tv, NULL);
     log->tv_sec_start = tv.tv_sec;
+
+    /* TODO: parse level string later */
+    if (!args)
+    	log->level = 0;
 
     return log;
 }

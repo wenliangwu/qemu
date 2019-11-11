@@ -234,7 +234,7 @@ static void dw_pci_realize(PCIDevice *pci_dev, Error **errp)
     dw->system_memory = get_system_memory();
     //dw->machine_opts = qemu_get_machine_opts();
 
-    dw->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    dw->log = log_init(NULL, NULL);    /* TODO: add log name to cmd line */
 
     /* PCI reg space  */
     pci = g_malloc(sizeof(*pci));
