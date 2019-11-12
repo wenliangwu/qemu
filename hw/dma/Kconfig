@@ -20,3 +20,12 @@ config ZYNQ_DEVCFG
 
 config STP2000
     bool
+
+config DW_DMA_DSP
+    bool
+
+config DW_DMA_PCI
+    bool
+
+config HDA_DMA_DSP
+    bool

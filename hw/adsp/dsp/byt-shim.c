@@ -27,6 +27,9 @@
 #include "elf.h"
 #include "exec/memory.h"
 #include "exec/address-spaces.h"
+#include "migration/vmstate.h"
+#include "qemu/main-loop.h"
+#include "sysemu/runstate.h"
 
 #include "qemu/io-bridge.h"
 #include "hw/audio/adsp-dev.h"

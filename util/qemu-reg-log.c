@@ -20,7 +20,6 @@
 
 #include <sys/time.h>
 #include <stdio.h>
-#include <glib.h>
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu-common.h"

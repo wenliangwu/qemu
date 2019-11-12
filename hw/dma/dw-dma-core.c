@@ -199,6 +199,7 @@ static int dma_llp_reloaded(struct dma_chan *dma_chan)
     return 1;
 }
 
+#ifdef CONFIG_DW_DMA_DSP
 /* read from MEM and write to SSP - audio playback */
 static int dma_M2P_copy_burst(struct dma_chan *dma_chan)
 {
@@ -343,6 +344,7 @@ static int dma_P2M_copy_burst(struct dma_chan *dma_chan)
         return 1;
     }
 }
+#endif
 
 /* read from host and write to DSP - audio playback */
 static int dma_M2M_read_host_burst(struct dma_chan *dma_chan)
@@ -537,6 +539,7 @@ static void * dma_channel_Mdsp2Mhost_work(void *data)
     return NULL;
 }
 
+#ifdef CONFIG_DW_DMA_DSP
 /* peripheral to mem channel work */
 static void * dma_channel_P2M_work(void *data)
 {
@@ -594,6 +597,7 @@ static void dma_M2P_start(struct adsp_gp_dmac *dmac, uint32_t chan, int ssp)
     qemu_thread_create(&dma_chan->thread, dma_chan->thread_name,
         dma_channel_M2P_work, dma_chan, QEMU_THREAD_DETACHED);
 }
+#endif
 
 static void dma_Mdsp2Mhost_start(struct adsp_gp_dmac *dmac, uint32_t chan)
 {
@@ -667,10 +671,12 @@ static void dma_stop_transfer(struct adsp_gp_dmac *dmac, uint32_t chan)
 /* init new DMA mem to mem playback transfer */
 static void dma_start_transfer(struct adsp_gp_dmac *dmac, uint32_t chan)
 {
-    struct adsp_ssp *ssp;
     struct dma_chan *dma_chan;
     uint32_t sar, dar, ctl_lo;
+#ifdef CONFIG_DW_DMA_DSP
+    struct adsp_ssp *ssp;
     int i = 0;
+#endif
 
     /* prepare timer context */
     dma_chan = &dmac->dma_chan[chan];
@@ -699,6 +705,7 @@ static void dma_start_transfer(struct adsp_gp_dmac *dmac, uint32_t chan)
             return;
         }
         break;
+#ifdef CONFIG_DW_DMA_DSP
     case 1: /*DW_CTLL_FC_M2P */
         while ((ssp = ssp_get_port(i++)) != NULL) {
             if (dar == ssp->ssp_dev->desc.base + SSDR) {
@@ -715,6 +722,7 @@ static void dma_start_transfer(struct adsp_gp_dmac *dmac, uint32_t chan)
             }
         }
         break;
+#endif
     default:
         /* should not get here */
         log_text(dmac->log, LOG_DMA,

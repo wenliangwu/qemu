@@ -18,6 +18,8 @@
  * with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "qemu/osdep.h"
+#include "hw/qdev-properties.h"
 #include "hw/audio/adsp-host.h"
 #include "hw/adsp/byt.h"
 #include "hw/adsp/log.h"

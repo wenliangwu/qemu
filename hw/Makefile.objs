@@ -3,6 +3,7 @@ ifeq ($(CONFIG_SOFTMMU), y)
 devices-dirs-$(call lor,$(CONFIG_VIRTIO_9P),$(call land,$(CONFIG_VIRTFS),$(CONFIG_XEN))) += 9pfs/
 devices-dirs-y += acpi/
 devices-dirs-y += adc/
+devices-dirs-y += adsp/
 devices-dirs-y += audio/
 devices-dirs-y += block/
 devices-dirs-y += bt/
@@ -41,7 +42,6 @@ devices-dirs-$(CONFIG_MEM_DEVICE) += mem/
 devices-dirs-$(CONFIG_NUBUS) += nubus/
 devices-dirs-y += semihosting/
 devices-dirs-y += smbios/
-devices-dirs-y += adsp/
 endif
 
 common-obj-y += $(devices-dirs-y)
