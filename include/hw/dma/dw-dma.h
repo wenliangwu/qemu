@@ -34,6 +34,7 @@
 #include "exec/address-spaces.h"
 #include "qemu/thread.h"
 #include "qemu/io-bridge.h"
+#include "hw/adsp/hw.h"
 
 struct adsp_dev;
 struct adsp_host;

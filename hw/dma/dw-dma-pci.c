@@ -19,6 +19,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "hw/qdev-properties.h"
 #include <mqueue.h>
 #include "sysemu/sysemu.h"
 #include "hw/acpi/aml-build.h"
@@ -32,11 +33,11 @@
 #include "qemu/io-bridge.h"
 #include "hw/pci/pci.h"
 
-#include <hw/i386/pc.h>
-#include <hw/i386/ioapic.h>
-#include <hw/i386/ioapic_internal.h>
-#include <hw/adsp/shim.h>
-#include <hw/adsp/log.h>
+#include "hw/i386/pc.h"
+#include "hw/i386/ioapic.h"
+#include "hw/i386/ioapic_internal.h"
+#include "hw/adsp/shim.h"
+#include "hw/adsp/log.h"
 #include "hw/dma/dw-dma.h"
 #include "hw/audio/adsp-host.h"
 
@@ -206,7 +207,7 @@ static void dw_dmac_init(struct dw_host *dw, int id)
             name, dw->desc->gp_dmac_dev[id].desc.size);
     memory_region_add_subregion(dw->system_memory,
             dw->desc->gp_dmac_dev[id].desc.base, reg_dmac);
-    qemu_register_reset(dw_dmac_reset, dmac);
+ //   qemu_register_reset(dw_dmac_reset, dmac);
 
     /* channels */
     for (j = 0; j < NUM_CHANNELS; j++) {

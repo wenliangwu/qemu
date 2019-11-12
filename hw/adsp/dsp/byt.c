@@ -31,6 +31,10 @@
 #include "hw/sysbus.h"
 #include "qemu/error-report.h"
 #include "qemu/io-bridge.h"
+#include "migration/vmstate.h"
+#include "qemu/main-loop.h"
+#include "sysemu/runstate.h"
+#include "sysemu/reset.h"
 
 #include "hw/audio/adsp-dev.h"
 #include "hw/adsp/shim.h"
@@ -112,7 +116,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     adsp->shm_idx = 0;
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
-    adsp->cpu_model = machine->cpu_model;
+    //adsp->cpu_model = machine->cpu_model;
     adsp->kernel_filename = qemu_opt_get(adsp->machine_opts, "kernel");
     adsp->ops = &byt_ops;
 
@@ -121,7 +125,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
         adsp->cpu_model = XTENSA_DEFAULT_CPU_MODEL;
     }
 
-    for (n = 0; n < smp_cpus; n++) {
+    for (n = 0; n < machine->smp.cpus; n++) {
 
         adsp->xtensa[n] = g_malloc(sizeof(struct adsp_xtensa));
         adsp->xtensa[n]->cpu = XTENSA_CPU(cpu_create(machine->cpu_type));

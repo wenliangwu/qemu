@@ -1,0 +1,5 @@
+config ADSP_DSP
+    bool
+
+config ADSP_HOST
+    bool
