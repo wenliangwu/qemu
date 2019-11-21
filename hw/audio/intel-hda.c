@@ -21,14 +21,15 @@
 #include "hw/pci/pci.h"
 #include "hw/qdev-properties.h"
 #include "hw/pci/msi.h"
+#include "hw/audio/adsp-host.h"
 #include "qemu/timer.h"
 #include "qemu/bitops.h"
 #include "qemu/log.h"
 #include "qemu/module.h"
 #include "hw/audio/soundhw.h"
-#include "intel-hda.h"
+#include "hw/audio/intel-hda.h"
 #include "migration/vmstate.h"
-#include "intel-hda-defs.h"
+#include "hw/audio/intel-hda-defs.h"
 #include "sysemu/dma.h"
 #include "qapi/error.h"
 
@@ -114,101 +115,6 @@ bool hda_codec_xfer(HDACodecDevice *dev, uint32_t stnr, bool output,
 
 /* --------------------------------------------------------------------- */
 /* intel hda emulation                                                   */
-
-typedef struct IntelHDAStream IntelHDAStream;
-typedef struct IntelHDAState IntelHDAState;
-typedef struct IntelHDAReg IntelHDAReg;
-
-typedef struct bpl {
-    uint64_t addr;
-    uint32_t len;
-    uint32_t flags;
-} bpl;
-
-struct IntelHDAStream {
-    /* registers */
-    uint32_t ctl;
-    uint32_t lpib;
-    uint32_t cbl;
-    uint32_t lvi;
-    uint32_t fmt;
-    uint32_t bdlp_lbase;
-    uint32_t bdlp_ubase;
-
-    /* state */
-    bpl      *bpl;
-    uint32_t bentries;
-    uint32_t bsize, be, bp;
-};
-
-struct IntelHDAState {
-    PCIDevice pci;
-    const char *name;
-    HDACodecBus codecs;
-
-    /* registers */
-    uint32_t g_ctl;
-    uint32_t wake_en;
-    uint32_t state_sts;
-    uint32_t int_ctl;
-    uint32_t int_sts;
-    uint32_t wall_clk;
-
-    uint32_t corb_lbase;
-    uint32_t corb_ubase;
-    uint32_t corb_rp;
-    uint32_t corb_wp;
-    uint32_t corb_ctl;
-    uint32_t corb_sts;
-    uint32_t corb_size;
-
-    uint32_t rirb_lbase;
-    uint32_t rirb_ubase;
-    uint32_t rirb_wp;
-    uint32_t rirb_cnt;
-    uint32_t rirb_ctl;
-    uint32_t rirb_sts;
-    uint32_t rirb_size;
-
-    uint32_t dp_lbase;
-    uint32_t dp_ubase;
-
-    uint32_t icw;
-    uint32_t irr;
-    uint32_t ics;
-
-    uint32_t adspcs;
-    uint32_t adspic;
-    uint32_t adspis;
-    uint32_t adspic2;
-    uint32_t adspis2;
-
-    uint32_t hipct;
-    uint32_t hipcte;
-    uint32_t hipci;
-    uint32_t hipcie;
-    uint32_t hipcctl;
-
-    /* streams */
-    IntelHDAStream st[8];
-
-    /* state */
-    MemoryRegion mmio;
-    uint32_t rirb_count;
-    int64_t wall_base_ns;
-
-    /* debug logging */
-    const IntelHDAReg *last_reg;
-    uint32_t last_val;
-    uint32_t last_write;
-    uint32_t last_sec;
-    uint32_t repeat_count;
-
-    /* properties */
-    uint32_t debug;
-    OnOffAuto msi;
-    bool old_msi_addr;
-};
 
 #define TYPE_INTEL_HDA_GENERIC "intel-hda-generic"
 
@@ -545,7 +451,18 @@ static void intel_hda_get_wall_clk(IntelHDAState *d, const IntelHDAReg *reg)
 
 static void intel_hda_set_adspcs(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
+    uint32_t pwr = (d->adspcs >> 16) & 0xff;
 
+    d->adspcs &= 0x00ffffff;
+    d->adspcs |= (pwr << 24);
+
+    /* core 0 powered ON ? */
+    if ((((old >> 16) & 1) == 0) && (((d->adspcs >> 16) & 1) == 1)) {
+        /* reset ROM state */
+        d->hipcie = HDA_DSP_REG_HIPCIE_DONE;
+        d->fw_boot_count = 0;
+        d->romsts = HDA_DSP_ROM_STATUS_INIT;
+    }
 }
 
 static void intel_hda_set_adspic(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
@@ -593,6 +510,12 @@ static void intel_hda_set_hipcctl(IntelHDAState *d, const IntelHDAReg *reg, uint
 
 }
 
+static void intel_hda_get_rom_status(IntelHDAState *d, const IntelHDAReg *reg)
+{
+    if (d->fw_boot_count++ > 10)
+        d->romsts = HDA_DSP_ROM_FW_ENTERED;
+}
+
 static void intel_hda_set_corb_wp(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_corb_run(d);
@@ -636,7 +559,12 @@ static void intel_hda_set_st_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint3
     if (st->ctl & 0x01) {
         /* reset */
         dprint(d, 1, "st #%d: reset\n", reg->stream);
-        st->ctl = SD_STS_FIFO_READY << 24;
+
+        /* codeloader holds it current state */
+        if (st->is_codeloader)
+            st->ctl |= SD_STS_FIFO_READY << 24;
+        else
+            st->ctl = SD_STS_FIFO_READY << 24;
     }
     if ((st->ctl & 0x02) != (old & 0x02)) {
         uint32_t stnr = (st->ctl >> 20) & 0x0f;
@@ -653,19 +581,21 @@ static void intel_hda_set_st_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint3
             intel_hda_notify_codecs(d, stnr, false, output);
         }
     }
+
     intel_hda_update_irq(d);
 }
 
 /* --------------------------------------------------------------------- */
 
 #define ST_REG(_n, _o) (0x80 + (_n) * 0x20 + (_o))
+#define SD_REG(_n, _o) (((_n) * 0x8) + (_o))
 
 static const struct IntelHDAReg regtab[] = {
     /* global */
     [ ICH6_REG_GCAP ] = {
         .name     = "GCAP",
         .size     = 2,
-        .reset    = 0x4401,
+        .reset    = 0x8801,
     },
     [ ICH6_REG_VMIN ] = {
         .name     = "VMIN",
@@ -680,11 +610,13 @@ static const struct IntelHDAReg regtab[] = {
         .name     = "OUTPAY",
         .size     = 2,
         .reset    = 0x3c,
+        .offset   = offsetof(IntelHDAState, outpay),
     },
     [ ICH6_REG_INPAY ] = {
         .name     = "INPAY",
         .size     = 2,
         .reset    = 0x1d,
+        .offset   = offsetof(IntelHDAState, inpay),
     },
     [ ICH6_REG_GCTL ] = {
         .name     = "GCTL",
@@ -708,6 +640,14 @@ static const struct IntelHDAReg regtab[] = {
         .offset   = offsetof(IntelHDAState, state_sts),
         .whandler = intel_hda_set_state_sts,
     },
+
+    [ ICH6_REG_GSTS ] = {
+        .name     = "GSTS",
+        .size     = 2,
+         .wmask    = 0x2,
+        .offset   = offsetof(IntelHDAState, gsts),
+    },
+
     [ ICH6_REG_LLCH ] = {
         .name     = "LLCH",
         .size     = 2,
@@ -955,82 +895,107 @@ static const struct IntelHDAReg regtab[] = {
     HDA_STREAM("IN", 1)
     HDA_STREAM("IN", 2)
     HDA_STREAM("IN", 3)
+    HDA_STREAM("IN", 4)
+    HDA_STREAM("IN", 5)
+    HDA_STREAM("IN", 6)
+    HDA_STREAM("IN", 7)
 
-    HDA_STREAM("OUT", 4)
-    HDA_STREAM("OUT", 5)
-    HDA_STREAM("OUT", 6)
-    HDA_STREAM("OUT", 7)
+    HDA_STREAM("OUT", 8)
+    HDA_STREAM("OUT", 9)
+    HDA_STREAM("OUT", 10)
+    HDA_STREAM("OUT", 11)
+    HDA_STREAM("OUT", 12)
+    HDA_STREAM("OUT", 13)
+    HDA_STREAM("OUT", 14)
+    HDA_STREAM("OUT", 15)
+
 
     /* capabilities */
     [ ICH6_REG_ALLCH ] = {
         .name     = "ALLCH",
         .size     = 2,
-        .reset    = ICH6_PP_CAP_ID << ICH6_CAP_SHIFT,
+        .reset    = (ICH6_PP_CAP_ID << ICH6_CAP_SHIFT) | ICH6_GTS_CAP_BASE,
     },
 
-   /* Control and Status */
-   [ ICH6_REG_ADSPCS ] = {
-        .name     = "ADSPCS",
+    /* PP regs */
+    [ ICH6_REG_PP_CTL ] = {
+        .name     = "PPCTL",
         .size     = 4,
-	.whandler = intel_hda_set_adspcs,
-        .offset   = offsetof(IntelHDAState, adspcs),
+        .offset   = offsetof(IntelHDAState, ppctl),
     },
-   [ ICH6_REG_ADSPIC ] = {
-        .name     = "ADSPIC",
+    [ ICH6_REG_PP_STS ] = {
+        .name     = "PPSTS",
         .size     = 4,
-	.whandler = intel_hda_set_adspic,
-        .offset   = offsetof(IntelHDAState, adspic),
-    },
-   [ ICH6_REG_ADSPIS ] = {
-        .name     = "ADSPIS",
-        .size     = 4,
-	.rhandler = intel_hda_get_adspis,
-        .offset   = offsetof(IntelHDAState, adspis),
-    },
-    [ ICH6_REG_ADSPIC2 ] = {
-        .name     = "ADSPIC2",
-        .size     = 4,
-	.whandler = intel_hda_set_adspic2,
-        .offset   = offsetof(IntelHDAState, adspic2),
-    },
-   [ ICH6_REG_ADSPIS2 ] = {
-        .name     = "ADSPIS2",
-        .size     = 4,
-        .rhandler = intel_hda_get_adspis2,
-        .offset   = offsetof(IntelHDAState, adspis2),
+        .offset   = offsetof(IntelHDAState, ppsts),
     },
 
-    /* IPC */
-    [ ICH6_REG_HIPCT ] = {
-        .name     = "HIPCT",
+    /* GTS caps */
+    [ ICH6_GTS_CAP_BASE ] = {
+        .name     = "GTSCH",
         .size     = 4,
-	.whandler = intel_hda_set_hipct,
-        .offset   = offsetof(IntelHDAState, hipct),
+        .reset    = (0x1 << ICH6_CAP_SHIFT) | ICH6_DRSM_CAP_BASE,
     },
-    [ ICH6_REG_HIPCTE ] = {
-        .name     = "HIPCTE",
+
+    /* DRSM caps */
+    [ ICH6_DRSM_CAP_BASE ] = {
+        .name     = "DRSMCH",
         .size     = 4,
-	.whandler = intel_hda_set_hipcte,
-        .offset   = offsetof(IntelHDAState, hipcte),
+        .reset    = (0x5 << ICH6_CAP_SHIFT) | ICH6_SPIB_CAP_BASE,
     },
-    [ ICH6_REG_HIPCI ] = {
-        .name     = "HIPCTI",
+
+    /* SPIB caps */
+    [ ICH6_SPIB_CAP_BASE ] = {
+        .name     = "SBPFCH",
         .size     = 4,
-	.whandler = intel_hda_set_hipci,
-        .offset   = offsetof(IntelHDAState, hipci),
+        .reset    = (0x4 << ICH6_CAP_SHIFT),
     },
-    [ ICH6_REG_HIPCIE ] = {
-        .name     = "HIPCIE",
+
+    [ ICH6_REG_SPBFCCTL ] = {
+        .name     = "SBPFCCTL",
         .size     = 4,
-	.whandler = intel_hda_set_hipcie,
-        .offset   = offsetof(IntelHDAState, hipcie),
+        .wmask    = 0xffffffff,
+        .offset   = offsetof(IntelHDAState, sbpfcctl),
     },
-    [ ICH6_REG_HIPCCTL ] = {
-        .name     = "HIPCCTL",
+
+     [ 0x748 ] = {
+        .name     = "blah****",
         .size     = 4,
-	.whandler = intel_hda_set_hipcctl,
-        .offset   = offsetof(IntelHDAState, hipcctl),
+        .wmask    = 0xffffffff,
+        .offset   = offsetof(IntelHDAState, sbpfcctl),
     },
+
+#define SPIB_STREAM(_t, _i)                                            \
+    [ SD_REG(_i, ICH6_REG_SPIB_CTL) ] = {                               \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " SPIB",                          \
+        .size     = 4,                                                \
+        .wmask    = 0xffffffff,                                       \
+        .offset   = offsetof(IntelHDAState, sd[_i].spib),              \
+    },                                                                \
+    [ SD_REG(_i, ICH6_REG_SPIB_CTL) + 4] = {                            \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " MAXFIFO(stnr)",                    \
+        .size     = 4,                                                \
+        .offset   = offsetof(IntelHDAState, sd[_i].maxfifos),         \
+    }
+
+    SPIB_STREAM("IN", 0),
+    SPIB_STREAM("IN", 1),
+    SPIB_STREAM("IN", 2),
+    SPIB_STREAM("IN", 3),
+    SPIB_STREAM("IN", 4),
+    SPIB_STREAM("IN", 5),
+    SPIB_STREAM("IN", 6),
+    SPIB_STREAM("IN", 7),
+
+    SPIB_STREAM("OUT", 8),
+    SPIB_STREAM("OUT", 9),
+    SPIB_STREAM("OUT", 10),
+    SPIB_STREAM("OUT", 11),
+    SPIB_STREAM("OUT", 12),
+    SPIB_STREAM("OUT", 13),
+    SPIB_STREAM("OUT", 14),
+    SPIB_STREAM("OUT", 15),
 };
 
 static const IntelHDAReg *intel_hda_reg_find(IntelHDAState *d, hwaddr addr)
@@ -1040,14 +1005,209 @@ static const IntelHDAReg *intel_hda_reg_find(IntelHDAState *d, hwaddr addr)
     if (addr >= ARRAY_SIZE(regtab)) {
         goto noreg;
     }
-    reg = regtab+addr;
+    reg = regtab + addr;
     if (reg->name == NULL) {
         goto noreg;
     }
     return reg;
 
 noreg:
-    dprint(d, 1, "unknown register, addr 0x%x\n", (int) addr);
+    dprint(d, 1, "unknown HDA register, addr 0x%x\n", (int) addr);
+    return NULL;
+}
+
+#define CL_REG(_n, _o) (HDA_ADSP_LOADER_BASE + (_o))
+
+/* CAVS v1.5 */
+static const struct IntelHDAReg regtabdsp[] = {
+
+   /* Control and Status */
+   [ HDA_DSP_REG_ADSPCS ] = {
+        .name     = "ADSPCS",
+        .size     = 4,
+	.whandler = intel_hda_set_adspcs,
+        .reset    = 0x0000ffff,
+        .offset   = offsetof(IntelHDAState, adspcs),
+        .wmask    = 0x00ffffff,
+    },
+   [ HDA_DSP_REG_ADSPIC ] = {
+        .name     = "ADSPIC",
+        .size     = 4,
+	.whandler = intel_hda_set_adspic,
+        .offset   = offsetof(IntelHDAState, adspic),
+    },
+   [ HDA_DSP_REG_ADSPIS ] = {
+        .name     = "ADSPIS",
+        .size     = 4,
+	.rhandler = intel_hda_get_adspis,
+        .offset   = offsetof(IntelHDAState, adspis),
+    },
+    [ HDA_DSP_REG_ADSPIC2 ] = {
+        .name     = "ADSPIC2",
+        .size     = 4,
+	.whandler = intel_hda_set_adspic2,
+        .offset   = offsetof(IntelHDAState, adspic2),
+    },
+   [ HDA_DSP_REG_ADSPIS2 ] = {
+        .name     = "ADSPIS2",
+        .size     = 4,
+        .rhandler = intel_hda_get_adspis2,
+        .offset   = offsetof(IntelHDAState, adspis2),
+    },
+
+    /* codeloader */
+#define HDA_CL_STREAM(_t, _i)                                            \
+    [ CL_REG(_i, ICH6_REG_SD_CTL) ] = {                               \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " CTL",                          \
+        .size     = 4,                                                \
+        .wmask    = 0x1cff001f,                                       \
+        .offset   = offsetof(IntelHDAState, st[_i].ctl),              \
+        .whandler = intel_hda_set_st_ctl,                             \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_CTL) + 2] = {                            \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " CTL(stnr)",                    \
+        .size     = 1,                                                \
+        .shift    = 16,                                               \
+        .wmask    = 0x00ff0000,                                       \
+        .offset   = offsetof(IntelHDAState, st[_i].ctl),              \
+        .whandler = intel_hda_set_st_ctl,                             \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_STS)] = {                                \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " CTL(sts)",                     \
+        .size     = 1,                                                \
+        .shift    = 24,                                               \
+        .wmask    = 0x1c000000,                                       \
+        .wclear   = 0x1c000000,                                       \
+        .offset   = offsetof(IntelHDAState, st[_i].ctl),              \
+        .whandler = intel_hda_set_st_ctl,                             \
+        .reset    = SD_STS_FIFO_READY << 24                           \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_LPIB) ] = {                              \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " LPIB",                         \
+        .size     = 4,                                                \
+        .offset   = offsetof(IntelHDAState, st[_i].lpib),             \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_LPIB) + 0x2000 ] = {                     \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " LPIB(alias)",                  \
+        .size     = 4,                                                \
+        .offset   = offsetof(IntelHDAState, st[_i].lpib),             \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_CBL) ] = {                               \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " CBL",                          \
+        .size     = 4,                                                \
+        .wmask    = 0xffffffff,                                       \
+        .offset   = offsetof(IntelHDAState, st[_i].cbl),              \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_LVI) ] = {                               \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " LVI",                          \
+        .size     = 2,                                                \
+        .wmask    = 0x00ff,                                           \
+        .offset   = offsetof(IntelHDAState, st[_i].lvi),              \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_FIFOSIZE) ] = {                          \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " FIFOS",                        \
+        .size     = 2,                                                \
+        .reset    = HDA_BUFFER_SIZE,                                  \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_FORMAT) ] = {                            \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " FMT",                          \
+        .size     = 2,                                                \
+        .wmask    = 0x7f7f,                                           \
+        .offset   = offsetof(IntelHDAState, st[_i].fmt),              \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_BDLPL) ] = {                             \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " BDLPL",                        \
+        .size     = 4,                                                \
+        .wmask    = 0xffffff80,                                       \
+        .offset   = offsetof(IntelHDAState, st[_i].bdlp_lbase),       \
+    },                                                                \
+    [ CL_REG(_i, ICH6_REG_SD_BDLPU) ] = {                             \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " BDLPU",                        \
+        .size     = 4,                                                \
+        .wmask    = 0xffffffff,                                       \
+        .offset   = offsetof(IntelHDAState, st[_i].bdlp_ubase),       \
+    },                                                                \
+
+    HDA_CL_STREAM("CL", 15)
+
+    /* IPC */
+    [ HDA_DSP_REG_HIPCT ] = {
+        .name     = "HIPCT",
+        .size     = 4,
+	.whandler = intel_hda_set_hipct,
+        .offset   = offsetof(IntelHDAState, hipct),
+    },
+    [ HDA_DSP_REG_HIPCTE ] = {
+        .name     = "HIPCTE",
+        .size     = 4,
+	.whandler = intel_hda_set_hipcte,
+        .offset   = offsetof(IntelHDAState, hipcte),
+    },
+    [ HDA_DSP_REG_HIPCI ] = {
+        .name     = "HIPCI",
+        .size     = 4,
+	.whandler = intel_hda_set_hipci,
+        .offset   = offsetof(IntelHDAState, hipci),
+    },
+    [ HDA_DSP_REG_HIPCIE ] = {
+        .name     = "HIPCIE",
+        .size     = 4,
+	.whandler = intel_hda_set_hipcie,
+        .offset   = offsetof(IntelHDAState, hipcie),
+    },
+    [ HDA_DSP_REG_HIPCCTL ] = {
+        .name     = "HIPCCTL",
+        .size     = 4,
+	.whandler = intel_hda_set_hipcctl,
+        .offset   = offsetof(IntelHDAState, hipcctl),
+    },
+
+    /* rom regs */
+    [ HDA_DSP_REG_ROM_STATUS ] = {
+        .name    = "ROMSTS",
+        .size    = 4,
+        .reset   = HDA_DSP_ROM_STATUS_INIT,
+        .rhandler = intel_hda_get_rom_status,
+        .offset   = offsetof(IntelHDAState, romsts),
+    },
+    [ HDA_DSP_REG_ROM_ERROR ] = {
+        .name    = "ROMERR",
+        .size    = 4,
+        .reset   = 0,
+    },
+    [ HDA_DSP_REG_ROM_END ] = {
+        .name    = "ROMEND",
+        .size    = 4,
+        .reset   = 0,
+    },
+};
+
+static const IntelHDAReg *intel_hda_dsp_reg_find(IntelHDAState *d, hwaddr addr)
+{
+    const IntelHDAReg *reg;
+
+    if (addr >= ARRAY_SIZE(regtabdsp)) {
+        goto noreg;
+    }
+    reg = regtabdsp+addr;
+    if (reg->name == NULL) {
+        goto noreg;
+    }
+    return reg;
+
+noreg:
+    dprint(d, 1, "unknown DSP register, addr 0x%x\n", (int) addr);
     return NULL;
 }
 
@@ -1066,6 +1226,7 @@ static void intel_hda_reg_write(IntelHDAState *d, const IntelHDAReg *reg, uint32
     uint32_t old;
 
     if (!reg) {
+	printf("write value 0x%x failed\n", val);
         return;
     }
     if (!reg->wmask) {
@@ -1095,6 +1256,7 @@ static void intel_hda_reg_write(IntelHDAState *d, const IntelHDAReg *reg, uint32
             d->repeat_count = 0;
         }
     }
+
     assert(reg->offset != 0);
 
     addr = intel_hda_reg_addr(d, reg);
@@ -1122,7 +1284,7 @@ static uint32_t intel_hda_reg_read(IntelHDAState *d, const IntelHDAReg *reg,
     if (!reg) {
         return 0;
     }
-
+printf("read reg %s\n", reg->name);
     if (reg->rhandler) {
         reg->rhandler(d, reg);
     }
@@ -1159,6 +1321,7 @@ static uint32_t intel_hda_reg_read(IntelHDAState *d, const IntelHDAReg *reg,
             d->repeat_count = 0;
         }
     }
+printf("read %x\n", ret);
     return ret;
 }
 
@@ -1201,6 +1364,33 @@ static uint64_t intel_hda_mmio_read(void *opaque, hwaddr addr, unsigned size)
 static const MemoryRegionOps intel_hda_mmio_ops = {
     .read = intel_hda_mmio_read,
     .write = intel_hda_mmio_write,
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 4,
+    },
+    .endianness = DEVICE_NATIVE_ENDIAN,
+};
+
+static void intel_hda_dsp_mmio_write(void *opaque, hwaddr addr, uint64_t val,
+                                 unsigned size)
+{
+    IntelHDAState *d = opaque;
+    const IntelHDAReg *reg = intel_hda_dsp_reg_find(d, addr);
+
+    intel_hda_reg_write(d, reg, val, MAKE_64BIT_MASK(0, size * 8));
+}
+
+static uint64_t intel_hda_dsp_mmio_read(void *opaque, hwaddr addr, unsigned size)
+{
+    IntelHDAState *d = opaque;
+    const IntelHDAReg *reg = intel_hda_dsp_reg_find(d, addr);
+
+    return intel_hda_reg_read(d, reg, MAKE_64BIT_MASK(0, size * 8));
+}
+
+static const MemoryRegionOps intel_hda_dsp_mmio_ops = {
+    .read = intel_hda_dsp_mmio_read,
+    .write = intel_hda_dsp_mmio_write,
     .impl = {
         .min_access_size = 1,
         .max_access_size = 4,
@@ -1267,6 +1457,114 @@ static void intel_hda_realize(PCIDevice *pci, Error **errp)
 
     hda_codec_bus_init(DEVICE(pci), &d->codecs, sizeof(d->codecs),
                        intel_hda_response, intel_hda_xfer);
+}
+
+static void intel_hda_dsp_realize(PCIDevice *pci, Error **errp,
+		int version, const char *name)
+{
+    IntelHDAState *d = INTEL_HDA(pci);
+    uint8_t *conf = d->pci.config;
+    IntelHDAStream *st = d->st + 8;
+    Error *err = NULL;
+    int ret;
+
+    d->name = object_get_typename(OBJECT(d));
+
+    pci_config_set_interrupt_pin(conf, 1);
+
+    /* HDCTL off 0x40 bit 0 selects signaling mode (1-HDA, 0 - Ac97) 18.1.19 */
+    conf[0x40] = 0x01;
+    //conf[0x41] = 0x08;
+
+    if (d->msi != ON_OFF_AUTO_OFF) {
+        ret = msi_init(&d->pci, d->old_msi_addr ? 0x50 : 0x60,
+                       1, true, false, &err);
+        /* Any error other than -ENOTSUP(board's MSI support is broken)
+         * is a programming error */
+        assert(!ret || ret == -ENOTSUP);
+        if (ret && d->msi == ON_OFF_AUTO_ON) {
+            /* Can't satisfy user's explicit msi=on request, fail */
+            error_append_hint(&err, "You have to use msi=auto (default) or "
+                    "msi=off with this machine type.\n");
+            error_propagate(errp, err);
+            return;
+        }
+        assert(!err || d->msi == ON_OFF_AUTO_AUTO);
+        /* With msi=auto, we fall back to MSI off silently */
+        error_free(err);
+    }
+
+    /* codeloader is */
+    st->is_codeloader = true;
+
+    /* HDA Legacy BAR 0 */
+    memory_region_init_io(&d->mmio, OBJECT(d), &intel_hda_mmio_ops, d,
+                          "intel-hda", 0x4000);
+    pci_register_bar(&d->pci, 0, 0, &d->mmio);
+
+    /* DSP BAR 4 */
+    memory_region_init_io(&d->mmio_dsp, OBJECT(d), &intel_hda_dsp_mmio_ops, d,
+                          "intel-hda-dsp", 0x100000);
+    pci_register_bar(&d->pci, 4, 0, &d->mmio_dsp);
+
+    hda_codec_bus_init(DEVICE(pci), &d->codecs, sizeof(d->codecs),
+                       intel_hda_response, intel_hda_xfer);
+    adsp_hda_init(d, version,  name);
+}
+
+static void intel_hda_dsp_realize_bxt(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 15, "bxt");
+}
+
+static void intel_hda_dsp_realize_apl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 15, "apl");
+}
+
+static void intel_hda_dsp_realize_glk(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 15, "glk");
+}
+
+static void intel_hda_dsp_realize_kbl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 15, "kbl");
+}
+
+static void intel_hda_dsp_realize_skl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 15, "skl");
+}
+
+static void intel_hda_dsp_realize_cnl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 18, "cnl");
+}
+
+static void intel_hda_dsp_realize_cfl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 18, "cfl");
+}
+
+static void intel_hda_dsp_realize_icl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 18, "icl");
+}
+
+static void intel_hda_dsp_realize_tgl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 18, "tgl");
+}
+
+static void intel_hda_dsp_realize_cml(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 15, "cml");
+}
+
+static void intel_hda_dsp_realize_ehl(PCIDevice *pci, Error **errp)
+{
+	intel_hda_dsp_realize(pci, errp, 18, "ehl");
 }
 
 static void intel_hda_exit(PCIDevice *pci)
@@ -1339,7 +1637,52 @@ static const VMStateDescription vmstate_intel_hda = {
         VMSTATE_UINT32(icw, IntelHDAState),
         VMSTATE_UINT32(irr, IntelHDAState),
         VMSTATE_UINT32(ics, IntelHDAState),
-        VMSTATE_STRUCT_ARRAY(st, IntelHDAState, 8, 0,
+        VMSTATE_STRUCT_ARRAY(st, IntelHDAState, 16, 0,
+                             vmstate_intel_hda_stream,
+                             IntelHDAStream),
+
+        /* additional state info */
+        VMSTATE_UINT32(rirb_count, IntelHDAState),
+        VMSTATE_INT64(wall_base_ns, IntelHDAState),
+
+        VMSTATE_END_OF_LIST()
+    }
+};
+
+static const VMStateDescription vmstate_intel_dsp_hda = {
+    .name = "intel-hda",
+    .version_id = 1,
+    .post_load = intel_hda_post_load,
+    .fields = (VMStateField[]) {
+        VMSTATE_PCI_DEVICE(pci, IntelHDAState),
+
+        /* registers */
+        VMSTATE_UINT32(g_ctl, IntelHDAState),
+        VMSTATE_UINT32(wake_en, IntelHDAState),
+        VMSTATE_UINT32(state_sts, IntelHDAState),
+        VMSTATE_UINT32(int_ctl, IntelHDAState),
+        VMSTATE_UINT32(int_sts, IntelHDAState),
+        VMSTATE_UINT32(wall_clk, IntelHDAState),
+        VMSTATE_UINT32(corb_lbase, IntelHDAState),
+        VMSTATE_UINT32(corb_ubase, IntelHDAState),
+        VMSTATE_UINT32(corb_rp, IntelHDAState),
+        VMSTATE_UINT32(corb_wp, IntelHDAState),
+        VMSTATE_UINT32(corb_ctl, IntelHDAState),
+        VMSTATE_UINT32(corb_sts, IntelHDAState),
+        VMSTATE_UINT32(corb_size, IntelHDAState),
+        VMSTATE_UINT32(rirb_lbase, IntelHDAState),
+        VMSTATE_UINT32(rirb_ubase, IntelHDAState),
+        VMSTATE_UINT32(rirb_wp, IntelHDAState),
+        VMSTATE_UINT32(rirb_cnt, IntelHDAState),
+        VMSTATE_UINT32(rirb_ctl, IntelHDAState),
+        VMSTATE_UINT32(rirb_sts, IntelHDAState),
+        VMSTATE_UINT32(rirb_size, IntelHDAState),
+        VMSTATE_UINT32(dp_lbase, IntelHDAState),
+        VMSTATE_UINT32(dp_ubase, IntelHDAState),
+        VMSTATE_UINT32(icw, IntelHDAState),
+        VMSTATE_UINT32(irr, IntelHDAState),
+        VMSTATE_UINT32(ics, IntelHDAState),
+        VMSTATE_STRUCT_ARRAY(st, IntelHDAState, 16, 0,
                              vmstate_intel_hda_stream,
                              IntelHDAStream),
 
@@ -1355,6 +1698,10 @@ static Property intel_hda_properties[] = {
     DEFINE_PROP_UINT32("debug", IntelHDAState, debug, 0),
     DEFINE_PROP_ON_OFF_AUTO("msi", IntelHDAState, msi, ON_OFF_AUTO_AUTO),
     DEFINE_PROP_BOOL("old_msi_addr", IntelHDAState, old_msi_addr, false),
+    DEFINE_PROP_END_OF_LIST(),
+};
+
+static Property intel_hda_dsp_properties[] = {
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -1399,10 +1746,228 @@ static void intel_hda_class_init_bxt(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
 
+
     k->device_id = 0x5a98;
     k->revision = 3;
     set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
     dc->desc = "Intel HD Audio Controller (Broxton)";
+
+    k->realize = intel_hda_dsp_realize_bxt;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_apl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x1a98;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Apollolake)";
+
+    k->realize = intel_hda_dsp_realize_apl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_glk(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x3198;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Geminilake)";
+
+    k->realize = intel_hda_dsp_realize_glk;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_cnl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x9dc8;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Cannonlake)";
+
+    k->realize = intel_hda_dsp_realize_cnl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_cfl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0xa348;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Coffeelake)";
+
+    k->realize = intel_hda_dsp_realize_cfl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_kbl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x9d71;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Kabylake)";
+
+    k->realize = intel_hda_dsp_realize_kbl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_skl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x9d70;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Skylake)";
+
+    k->realize = intel_hda_dsp_realize_skl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_icl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x34C8;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Icelake)";
+
+    k->realize = intel_hda_dsp_realize_icl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_cml_lp(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x02c8;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Cometlake LP)";
+
+    k->realize = intel_hda_dsp_realize_cml;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_cml_h(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x06c8;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Cometlake H)";
+
+    k->realize = intel_hda_dsp_realize_cml;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_tgl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0xa0c8;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Tigerlake)";
+
+    k->realize = intel_hda_dsp_realize_tgl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
+}
+
+static void intel_hda_class_init_ehl(ObjectClass *klass, void *data)
+{
+    DeviceClass *dc = DEVICE_CLASS(klass);
+    PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+
+    k->device_id = 0x4b55;
+    k->revision = 3;
+    set_bit(DEVICE_CATEGORY_SOUND, dc->categories);
+    dc->desc = "Intel HD Audio Controller (Elkhartlake)";
+
+    k->realize = intel_hda_dsp_realize_ehl;
+    k->exit = intel_hda_exit;
+    k->vendor_id = PCI_VENDOR_ID_INTEL;
+    k->class_id = PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO;
+    dc->reset = intel_hda_reset;
+    dc->vmsd = &vmstate_intel_dsp_hda;
+    dc->props = intel_hda_dsp_properties;
 }
 
 static const TypeInfo intel_hda_info = {
@@ -1433,6 +1998,72 @@ static const TypeInfo intel_hda_info_bxt = {
     .name          = "bxt-intel-hda",
     .parent        = TYPE_INTEL_HDA_GENERIC,
     .class_init    = intel_hda_class_init_bxt,
+};
+
+static const TypeInfo intel_hda_info_apl = {
+    .name          = "apl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_apl,
+};
+
+static const TypeInfo intel_hda_info_glk = {
+    .name          = "glk-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_glk,
+};
+
+static const TypeInfo intel_hda_info_cnl = {
+    .name          = "cnl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_cnl,
+};
+
+static const TypeInfo intel_hda_info_cfl = {
+    .name          = "cfl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_cfl,
+};
+
+static const TypeInfo intel_hda_info_kbl = {
+    .name          = "kbl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_kbl,
+};
+
+static const TypeInfo intel_hda_info_skl = {
+    .name          = "skl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_skl,
+};
+
+static const TypeInfo intel_hda_info_icl = {
+    .name          = "icl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_icl,
+};
+
+static const TypeInfo intel_hda_info_cml_lp = {
+    .name          = "cml-lp-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_cml_lp,
+};
+
+static const TypeInfo intel_hda_info_cml_h = {
+    .name          = "cml_h-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_cml_h,
+};
+
+static const TypeInfo intel_hda_info_tgl = {
+    .name          = "tgl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_tgl,
+};
+
+static const TypeInfo intel_hda_info_ehl = {
+    .name          = "ehl-intel-hda",
+    .parent        = TYPE_INTEL_HDA_GENERIC,
+    .class_init    = intel_hda_class_init_ehl,
 };
 
 static void hda_codec_device_class_init(ObjectClass *klass, void *data)
@@ -1478,6 +2109,17 @@ static void intel_hda_register_types(void)
     type_register_static(&intel_hda_info_ich6);
     type_register_static(&intel_hda_info_ich9);
     type_register_static(&intel_hda_info_bxt);
+    type_register_static(&intel_hda_info_apl);
+    type_register_static(&intel_hda_info_glk);
+    type_register_static(&intel_hda_info_cnl);
+    type_register_static(&intel_hda_info_cfl);
+    type_register_static(&intel_hda_info_skl);
+    type_register_static(&intel_hda_info_kbl);
+    type_register_static(&intel_hda_info_icl);
+    type_register_static(&intel_hda_info_cml_lp);
+    type_register_static(&intel_hda_info_cml_h);
+    type_register_static(&intel_hda_info_tgl);
+    type_register_static(&intel_hda_info_ehl);
     type_register_static(&hda_codec_device_type_info);
     pci_register_soundhw("hda", "Intel HD Audio", intel_hda_and_codec_init);
 }

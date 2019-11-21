@@ -55,6 +55,8 @@
 
 #define ADSP_MAX_GP_DMAC        3
 
+typedef struct IntelHDAState IntelHDAState;
+
 struct adsp_dma_buffer {
     int chan;
     uint32_t *io;
@@ -140,5 +142,7 @@ void adsp_bxt_init_shim(struct adsp_host *adsp, MemoryRegion *parent,
         struct adsp_io_info *info);
 void adsp_bxt_host_init(struct adsp_host *adsp, const char *name);
 void build_acpi_bxt_adsp_devices(Aml *table);
+
+void adsp_hda_init(IntelHDAState *d, int version, const char *name);
 
 #endif

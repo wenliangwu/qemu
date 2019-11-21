@@ -88,18 +88,31 @@ enum { SDI0, SDI1, SDI2, SDI3, SDO0, SDO1, SDO2, SDO3 };
 #define ICH6_REG_ALLCH			0x800
 #define  ICH6_CAP_SHIFT			16
 #define  ICH6_PP_CAP_ID			0x3
-#define ICH6_REG_ADSPCS			0x804
-#define ICH6_REG_ADSPIC			0x808
-#define ICH6_REG_ADSPIS			0x80c
-#define ICH6_REG_ADSPIC2		0x810
-#define ICH6_REG_ADSPIS2		0x814
 
-#define ICH6_REG_HIPCT   		0x840
-#define ICH6_REG_HIPCTE   		0x844
-#define ICH6_REG_HIPCI   		0x848
-#define ICH6_REG_HIPCIE   		0x84c
-#define ICH6_REG_HIPCCTL   		0x850
+#define ICH6_GTS_CAP_BASE		0x500
 
+#define ICH6_DRSM_CAP_BASE		0x1f00
+
+#define ICH6_SPIB_CAP_BASE		0x700
+
+#define ICH6_REG_PP_CTL		(ICH6_REG_ALLCH + 0x4)
+#define ICH6_REG_PP_STS		(ICH6_REG_ALLCH + 0x8)
+
+#define ICH6_REG_SPBFCCTL	(ICH6_SPIB_CAP_BASE + 0x4)
+#define ICH6_REG_SPIB_CTL	(ICH6_SPIB_CAP_BASE + 0x8)
+
+
+/* IPC */
+#define HDA_DSP_REG_HIPCIE_DONE	(1 << 30)
+
+/* ROM */
+#define HDA_DSP_ROM_BASE	0x80000
+#define HDA_DSP_REG_ROM_STATUS	(HDA_DSP_ROM_BASE + 0x0)
+#define HDA_DSP_REG_ROM_ERROR	(HDA_DSP_ROM_BASE + 0x4)
+#define HDA_DSP_REG_ROM_END	(HDA_DSP_ROM_BASE + 0x8)
+
+#define HDA_DSP_ROM_STATUS_INIT			0x1
+#define HDA_DSP_ROM_FW_ENTERED			0x5
 
 /* PCI space */
 #define ICH6_PCIREG_TCSEL	0x44
@@ -202,6 +215,7 @@ enum {
 
 /* HD Audio class code */
 #define PCI_CLASS_MULTIMEDIA_HD_AUDIO	0x0403
+#define PCI_CLASS_MULTIMEDIA_HD_DSP_AUDIO	0x0401
 
 /* --------------------------------------------------------------------- */
 /* from linux/sound/pci/hda/hda_codec.h                                  */
