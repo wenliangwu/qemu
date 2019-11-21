@@ -107,7 +107,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     int n;
 
     adsp = g_malloc(sizeof(*adsp));
-    adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    adsp->log = log_init(NULL, NULL);    /* TODO: add log name to cmd line */
     adsp->desc = board;
     adsp->shm_idx = 0;
     adsp->system_memory = get_system_memory();

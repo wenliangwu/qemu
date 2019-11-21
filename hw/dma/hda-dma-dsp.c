@@ -62,7 +62,7 @@ void hda_dma_init_dev(struct adsp_dev *adsp, MemoryRegion *parent,
     dmac->irq_assert = 0;
     dmac->is_pci_dev = 0;
     dmac->do_irq = hda_dsp_do_irq;
-    dmac->log = log_init(NULL);
+    dmac->log = log_init(NULL, NULL);
     dmac->desc = info->space;
     dmac->io = info->region;
     dmac->info = info;

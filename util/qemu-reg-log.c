@@ -153,7 +153,7 @@ const struct adsp_reg_desc adsp_bxt_shim_map[] = {
     {.name = "extst", .enable = LOG_SHIM_EXTST, .offset = 0xc8},
 };
 
-struct adsp_log *log_init(const char *log_name)
+struct adsp_log *log_init(const char *log_name, const char *args)
 {
     struct adsp_log *log;
     struct timeval tv;
@@ -173,6 +173,11 @@ struct adsp_log *log_init(const char *log_name)
 
     gettimeofday(&tv, NULL);
     log->tv_sec_start = tv.tv_sec;
+
+    /* TODO: parse level string later */
+    if (!args)
+        log->level = 0;
+
 
     return log;
 }

@@ -118,7 +118,7 @@ void adsp_byt_host_init(struct adsp_host *adsp, const char *name)
     adsp->system_memory = get_system_memory();
     adsp->machine_opts = qemu_get_machine_opts();
 
-    adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    adsp->log = log_init(NULL, NULL);    /* TODO: add log name to cmd line */
     adsp->shm_idx = 0;
 
     adsp_create_host_memory_regions(adsp);

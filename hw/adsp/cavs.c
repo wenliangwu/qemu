@@ -393,7 +393,7 @@ void adsp_hda_init(IntelHDAState *d, int version, const char *name)
     adsp->machine_opts = qemu_get_machine_opts();
     adsp->shm_idx = 0;
 
-    adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    adsp->log = log_init(NULL, NULL);    /* TODO: add log name to cmd line */
 
     adsp_create_host_memory_regions(adsp);
 

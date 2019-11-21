@@ -127,7 +127,7 @@ void adsp_hsw_host_init(struct adsp_host *adsp, const char *name)
     adsp->machine_opts = qemu_get_machine_opts();
     adsp->shm_idx = 0;
 
-    adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    adsp->log = log_init(NULL, NULL);    /* TODO: add log name to cmd line */
 
     adsp_create_host_memory_regions(adsp);
     adsp_create_host_io_devices(adsp, NULL);
@@ -143,7 +143,7 @@ void adsp_bdw_host_init(struct adsp_host *adsp, const char *name)
     adsp->machine_opts = qemu_get_machine_opts();
     adsp->shm_idx = 0;
 
-    adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
+    adsp->log = log_init(NULL, NULL);    /* TODO: add log name to cmd line */
 
     adsp_create_host_memory_regions(adsp);
     adsp_create_host_io_devices(adsp, NULL);

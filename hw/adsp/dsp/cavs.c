@@ -370,7 +370,6 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
     void *rom;
 
     adsp = g_malloc(sizeof(*adsp));
-    adsp->log = log_init(NULL);    /* TODO: add log name to cmd line */
     adsp->desc = board;
     adsp->shm_idx = 0;
     adsp->system_memory = get_system_memory();
@@ -378,6 +377,7 @@ static struct adsp_dev *adsp_init(const struct adsp_desc *board,
   //  adsp->cpu_model = machine->cpu_model;
     adsp->kernel_filename = qemu_opt_get(adsp->machine_opts, "kernel");
     adsp->rom_filename = qemu_opt_get(adsp->machine_opts, "rom");
+    adsp->log = log_init(NULL, qemu_opt_get(adsp->machine_opts, "trace_regs"));
     adsp->ops = board->ops;
     adsp->clk_kHz = clk_kHz;
 
