@@ -159,6 +159,7 @@ struct IntelHDAState {
     uint32_t hipci;
     uint32_t hipcie;
     uint32_t hipcctl;
+    uint32_t em2;
 
     /* streams */
     IntelHDAStream st[16];

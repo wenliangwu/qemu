@@ -957,12 +957,12 @@ static const struct IntelHDAReg regtab[] = {
         .offset   = offsetof(IntelHDAState, sbpfcctl),
     },
 
-     [ 0x748 ] = {
-        .name     = "blah****",
-        .size     = 4,
-        .wmask    = 0xffffffff,
-        .offset   = offsetof(IntelHDAState, sbpfcctl),
-    },
+    [ 0x1030 ] = {
+            .name     = "EM2",
+            .size     = 4,
+            .wmask    = 0xffffffff,
+            .offset   = offsetof(IntelHDAState, em2),
+        },
 
 #define SPIB_STREAM(_t, _i)                                            \
     [ SD_REG(_i, ICH6_REG_SPIB_CTL) ] = {                               \
@@ -1226,7 +1226,6 @@ static void intel_hda_reg_write(IntelHDAState *d, const IntelHDAReg *reg, uint32
     uint32_t old;
 
     if (!reg) {
-	printf("write value 0x%x failed\n", val);
         return;
     }
     if (!reg->wmask) {
@@ -1284,7 +1283,7 @@ static uint32_t intel_hda_reg_read(IntelHDAState *d, const IntelHDAReg *reg,
     if (!reg) {
         return 0;
     }
-printf("read reg %s\n", reg->name);
+
     if (reg->rhandler) {
         reg->rhandler(d, reg);
     }
@@ -1321,7 +1320,7 @@ printf("read reg %s\n", reg->name);
             d->repeat_count = 0;
         }
     }
-printf("read %x\n", ret);
+
     return ret;
 }
 
@@ -1350,6 +1349,10 @@ static void intel_hda_mmio_write(void *opaque, hwaddr addr, uint64_t val,
     IntelHDAState *d = opaque;
     const IntelHDAReg *reg = intel_hda_reg_find(d, addr);
 
+    if (!reg)
+        fprintf(stderr, "hda: no register to write at 0x%lx value 0x%lx size %d\n",
+                addr, val, size);
+
     intel_hda_reg_write(d, reg, val, MAKE_64BIT_MASK(0, size * 8));
 }
 
@@ -1357,6 +1360,9 @@ static uint64_t intel_hda_mmio_read(void *opaque, hwaddr addr, unsigned size)
 {
     IntelHDAState *d = opaque;
     const IntelHDAReg *reg = intel_hda_reg_find(d, addr);
+
+    if (!reg)
+        fprintf(stderr, "hda: no register to read at 0x%lx size %d\n", addr, size);
 
     return intel_hda_reg_read(d, reg, MAKE_64BIT_MASK(0, size * 8));
 }
@@ -1377,6 +1383,10 @@ static void intel_hda_dsp_mmio_write(void *opaque, hwaddr addr, uint64_t val,
     IntelHDAState *d = opaque;
     const IntelHDAReg *reg = intel_hda_dsp_reg_find(d, addr);
 
+    if (!reg)
+        fprintf(stderr, "hda-dsp: no register to write at 0x%lx value 0x%lx size %d\n",
+                addr, val, size);
+
     intel_hda_reg_write(d, reg, val, MAKE_64BIT_MASK(0, size * 8));
 }
 
@@ -1384,6 +1394,9 @@ static uint64_t intel_hda_dsp_mmio_read(void *opaque, hwaddr addr, unsigned size
 {
     IntelHDAState *d = opaque;
     const IntelHDAReg *reg = intel_hda_dsp_reg_find(d, addr);
+
+    if (!reg)
+        fprintf(stderr, "hda-dsp: no register to read at 0x%lx size %d\n", addr, size);
 
     return intel_hda_reg_read(d, reg, MAKE_64BIT_MASK(0, size * 8));
 }
@@ -1474,7 +1487,6 @@ static void intel_hda_dsp_realize(PCIDevice *pci, Error **errp,
 
     /* HDCTL off 0x40 bit 0 selects signaling mode (1-HDA, 0 - Ac97) 18.1.19 */
     conf[0x40] = 0x01;
-    //conf[0x41] = 0x08;
 
     if (d->msi != ON_OFF_AUTO_OFF) {
         ret = msi_init(&d->pci, d->old_msi_addr ? 0x50 : 0x60,
