@@ -27,35 +27,22 @@
 
 #include "qemu/osdep.h"
 #include "cpu.h"
-#include "exec/exec-all.h"
 #include "exec/gdbstub.h"
 #include "qemu/host-utils.h"
 
 #include "core-hikey/core-isa.h"
 #include "overlay_tool.h"
 
-typedef struct
-{
-  int reg_num;
-  int bit_start;
-  int bit_size;
-} xtensa_reg_mask_t;
-
-typedef struct
-{
-  int count;
-  xtensa_reg_mask_t *mask;
-} xtensa_mask_t;
+#include "core-hikey/xtensa-modules.inc.c"
 
 static XtensaConfig hikey __attribute__((unused)) = {
     .name = "hikey",
     .gdb_regmap = {
-        .num_regs = 158,
-        .num_core_regs = 52,
         .reg = {
-#include "core-hikey/gdb-config.c"
+#include "core-hikey/gdb-config.inc.c"
         }
     },
+    .isa_internal = &xtensa_modules,
     .clock_freq_khz = 5000,
     DEFAULT_SECTIONS
 };
