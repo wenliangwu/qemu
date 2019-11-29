@@ -181,7 +181,8 @@ static int mq_init(const char *name, struct io_bridge *io)
         io->parent.mqdes = mq_open(io->parent.mq_name, O_RDONLY,
             0664, &io->parent.mqattr);
         if (io->parent.mqdes < 0) {
-            fprintf(stderr, "failed to open parent Rx queue %d\n", -errno);
+            fprintf(stderr, "failed to open parent Rx queue %s %d, has DSP been started ?\n",
+                    io->parent.mq_name, -errno);
             ret = -errno;
         }
 
@@ -190,7 +191,8 @@ static int mq_init(const char *name, struct io_bridge *io)
         io->child.mqdes = mq_open(io->child.mq_name, O_WRONLY,
             0664, &io->child.mqattr);
         if (io->child.mqdes < 0) {
-            fprintf(stderr, "failed to open parent Tx queue %d\n", -errno);
+            fprintf(stderr, "failed to open parent Tx queue %s %d has DSP been started ?\n",
+                    io->child.mq_name, -errno);
             ret = -errno;
         }
 
