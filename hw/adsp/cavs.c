@@ -280,18 +280,6 @@ const MemoryRegionOps ipc_v1_8_ops = {
     .endianness = DEVICE_NATIVE_ENDIAN,
 };
 
-static void ipc_init_1_5_dev(struct adsp_dev *adsp, MemoryRegion *parent,
-        struct adsp_io_info *info)
-{
-    //info->private = dmac;
-}
-
-static void ipc_init_1_8_dev(struct adsp_dev *adsp, MemoryRegion *parent,
-        struct adsp_io_info *info)
-{
-    //info->private = dmac;
-}
-
 static struct adsp_mem_desc adsp_1_5_mem[] = {
     {.name = "l2-sram", .base = ADSP_CAVS_HOST_DSP_SRAM_BASE,
         .size = ADSP_CAVS_1_5_DSP_SRAM_SIZE},
@@ -319,11 +307,6 @@ static struct adsp_mem_desc adsp_1_8_mem[] = {
 };
 
 static struct adsp_reg_space adsp_1_5_io[] = {
-    { .name = "pci",
-        .desc = {.base = ADSP_CAVS_PCI_BASE, .size = ADSP_PCI_SIZE},},
-    { .name = "ipc-dsp", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
-        .init = ipc_init_1_5_dev, .ops = &ipc_v1_5_ops,
-        .desc = {.base = 0, .size = 0},},
     { .name = "hostwin0", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
         .desc = {.base = ADSP_CAVS_HOST_1_5_SRAM_WND_BASE(0), .size = ADSP_CAVS_WND_SIZE},},
     { .name = "hostwin1", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
@@ -335,11 +318,6 @@ static struct adsp_reg_space adsp_1_5_io[] = {
 };
 
 static struct adsp_reg_space adsp_1_8_io[] = {
-    { .name = "pci",
-        .desc = {.base = ADSP_CAVS_PCI_BASE, .size = ADSP_PCI_SIZE},},
-    { .name = "ipc-dsp", .reg_count = ARRAY_SIZE(adsp_hsw_shim_map),
-        .init = ipc_init_1_8_dev, .ops = &ipc_v1_8_ops,
-        .desc = {.base = 0, .size = 0},},
     { .name = "hostwin0", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
         .desc = {.base = ADSP_CAVS_HOST_1_8_SRAM_WND_BASE(0), .size = ADSP_CAVS_WND_SIZE},},
     { .name = "hostwin1", .reg_count = ARRAY_SIZE(adsp_host_mbox_map),
