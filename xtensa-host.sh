@@ -184,7 +184,7 @@ rm -fr /dev/mqueue/qemu-io-*
 
 echo ./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS
 if [ -z ${TIMEOUT} ]; then
-	./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS;
+	./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS -semihosting;
 else
 	timeout --foreground $TIMEOUT ./xtensa-softmmu/qemu-system-xtensa -cpu $CPU -M $ADSP $TARGS $DARGS $IARGS -nographic $KERNEL $ROM $CARGS $GARGS > $LOG;
 fi
