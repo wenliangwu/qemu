@@ -15,6 +15,7 @@ xtensa_ss.add(files(
   'core-haswell.c',
   'core-icelake.c',
   'core-tigerlake.c',
+  'core-imx8.c',
   'cpu.c',
   'exc_helper.c',
   'fpu_helper.c',
