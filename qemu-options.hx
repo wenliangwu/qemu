@@ -3403,6 +3403,13 @@ SRST
     Use cmdline as kernel command line
 ERST
 
+DEF("rom", HAS_ARG, QEMU_OPTION_rom, \
+"-rom file	use 'file' as first stage boot loader ROM\n", QEMU_ARCH_XTENSA)
+SRST
+``-rom file``
+    Use file as first stage boot loader ROM.
+ERST
+
 DEF("initrd", HAS_ARG, QEMU_OPTION_initrd, \
            "-initrd file    use 'file' as initial ram disk\n", QEMU_ARCH_ALL)
 SRST
