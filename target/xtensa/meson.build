@@ -12,6 +12,7 @@ xtensa_ss.add(files(
   'core-baytrail.c',
   'core-apollolake.c',
   'core-cannonlake.c',
+  'core-haswell.c',
   'cpu.c',
   'exc_helper.c',
   'fpu_helper.c',
