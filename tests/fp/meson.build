@@ -1,8 +1,8 @@
 # There are namespace pollution issues on Windows, due to osdep.h
 # bringing in Windows headers that define a FLOAT128 type.
-if targetos == 'windows'
+#if targetos == 'windows'
   subdir_done()
-endif
+#endif
 
 fpcflags = [
   # softfloat defines
