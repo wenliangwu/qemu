@@ -13,6 +13,7 @@ xtensa_ss.add(files(
   'core-apollolake.c',
   'core-cannonlake.c',
   'core-haswell.c',
+  'core-icelake.c',
   'cpu.c',
   'exc_helper.c',
   'fpu_helper.c',
