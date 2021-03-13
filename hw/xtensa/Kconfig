@@ -21,3 +21,6 @@ config XTENSA_INTEL_ADSP_BYT
 
 config XTENSA_INTEL_ADSP_HSW
     bool
+
+config XTENSA_INTEL_ADSP_CAVS
+    bool
