@@ -10,4 +10,5 @@ xtensa_ss.add(when: 'CONFIG_XTENSA_XTFPGA', if_true: files('xtfpga.c'))
 
 xtensa_ss.add(when: 'CONFIG_ADSP', if_true: files('adsp-common.c'))
 xtensa_ss.add(when: 'CONFIG_XTENSA_INTEL_ADSP_BYT', if_true: files('byt.c'))
+xtensa_ss.add(when: 'CONFIG_XTENSA_INTEL_ADSP_HSW', if_true: files('hsw.c'))
 hw_arch += {'xtensa': xtensa_ss}
