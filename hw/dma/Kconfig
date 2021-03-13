@@ -33,3 +33,12 @@ config INTEL_DW_DMA_DSP
 config INTEL_DW_DMA_PCI
     bool
 
+config INTEL_HDA_DMA
+    bool
+
+config INTEL_HDA_DMA_DSP
+    bool
+
+config INTEL_HDA_DMA_PCI
+    bool
+
