@@ -42,3 +42,8 @@ config INTEL_HDA_DMA_DSP
 config INTEL_HDA_DMA_PCI
     bool
 
+config EDMA_DSP
+    bool
+
+config SDMA_DSP
+    bool
