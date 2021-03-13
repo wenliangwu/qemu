@@ -1,0 +1,12 @@
+# byt.c hsw.c cavs.c
+adsp_dsp_mbox_read(uint32_t addr, uint32_t value) "mbox: R 0x%08x value 0x%8x"
+adsp_dsp_mbox_write(uint32_t addr, uint32_t value) "mbox: W 0x%08x value 0x%8x"
+adsp_dsp_shim_read(uint32_t addr, uint32_t value) "shim: R 0x%08x value 0x%8x"
+adsp_dsp_shim_write(uint32_t addr, uint32_t value) "shim: W 0x%08x value 0x%8x"
+adsp_dsp_shim_mask(const char *name, uint32_t masking, uint32_t mask, uint32_t active) "mask: %s masking 0x%08x mask 0x%8x active 0x%8x"
+adsp_dsp_shim_event(const char *event, uint32_t value) "%s: 0x%8x"
+adsp_dsp_host_event(const char *event) "host action %s"
+adsp_dsp_host_msg(const char *event, uint32_t msg) "host %s %d"
+adsp_dsp_host_irq(const char *name, uint32_t masking, uint32_t mask, uint32_t active, uint32_t cmd) "mask: %s masking 0x%08x mask 0x%8x active 0x%8x cmd 0x%8x"
+adsp_dsp_shim_irq(const char *event) "%s"
+adsp_dsp_shim_timer(const char *event, uint32_t value) "%s time 0x%8x"
