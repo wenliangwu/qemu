@@ -23,3 +23,13 @@ config STP2000
 
 config SIFIVE_PDMA
     bool
+
+config INTEL_DW_DMA
+    bool
+
+config INTEL_DW_DMA_DSP
+    bool
+
+config INTEL_DW_DMA_PCI
+    bool
+

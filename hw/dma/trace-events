@@ -44,3 +44,8 @@ pl330_debug_exec_stall(void) "stall of debug instruction not implemented"
 pl330_iomem_write(uint32_t offset, uint32_t value) "addr: 0x%08"PRIx32" data: 0x%08"PRIx32
 pl330_iomem_write_clr(int i) "event interrupt lowered %d"
 pl330_iomem_read(uint32_t addr, uint32_t data) "addr: 0x%08"PRIx32" data: 0x%08"PRIx32
+
+# hda-dma-core.c
+hda_dma_m2m_req(uint32_t src, uint32_t dest, uint32_t size) "req: src 0x%8x dest 0x%8x size 0x%8x"
+hda_dma_m2m_complete(uint32_t src, uint32_t dest, uint32_t size) "complete: src 0x%8x dest 0x%8x size 0x%8x"
+hda_dma_m2p_copy(uint32_t dmac, uint32_t chan, uint32_t src, uint32_t dest, uint32_t size, uint32_t total) "m2p: %d:%d: completed SAR 0x%8x DAR 0x%8x size 0x8%x total 0x%8x"
