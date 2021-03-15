@@ -508,13 +508,14 @@ void intel_hda_set_st_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old
 /* --------------------------------------------------------------------- */
 
 #define ST_REG(_n, _o) (0x80 + (_n) * 0x20 + (_o))
+#define SD_REG(_n, _o) (((_n) * 0x8) + (_o))
 
 static const struct IntelHDAReg regtab[] = {
     /* global */
     [ ICH6_REG_GCAP ] = {
         .name     = "GCAP",
         .size     = 2,
-        .reset    = 0x4401,
+        .reset    = 0x8801,
     },
     [ ICH6_REG_VMIN ] = {
         .name     = "VMIN",
@@ -529,11 +530,13 @@ static const struct IntelHDAReg regtab[] = {
         .name     = "OUTPAY",
         .size     = 2,
         .reset    = 0x3c,
+        .offset   = offsetof(IntelHDAState, outpay),
     },
     [ ICH6_REG_INPAY ] = {
         .name     = "INPAY",
         .size     = 2,
         .reset    = 0x1d,
+        .offset   = offsetof(IntelHDAState, inpay),
     },
     [ ICH6_REG_GCTL ] = {
         .name     = "GCTL",
@@ -558,6 +561,18 @@ static const struct IntelHDAReg regtab[] = {
         .whandler = intel_hda_set_state_sts,
     },
 
+    [ ICH6_REG_GSTS ] = {
+        .name     = "GSTS",
+        .size     = 2,
+         .wmask    = 0x2,
+        .offset   = offsetof(IntelHDAState, gsts),
+    },
+
+    [ ICH6_REG_LLCH ] = {
+        .name     = "LLCH",
+        .size     = 2,
+        .reset    = ICH6_REG_ALLCH,
+    },
     /* interrupts */
     [ ICH6_REG_INTCTL ] = {
         .name     = "INTCTL",
@@ -788,12 +803,107 @@ static const struct IntelHDAReg regtab[] = {
     HDA_STREAM("IN", 1)
     HDA_STREAM("IN", 2)
     HDA_STREAM("IN", 3)
+    HDA_STREAM("IN", 4)
+    HDA_STREAM("IN", 5)
+    HDA_STREAM("IN", 6)
+    HDA_STREAM("IN", 7)
 
-    HDA_STREAM("OUT", 4)
-    HDA_STREAM("OUT", 5)
-    HDA_STREAM("OUT", 6)
-    HDA_STREAM("OUT", 7)
+    HDA_STREAM("OUT", 8)
+    HDA_STREAM("OUT", 9)
+    HDA_STREAM("OUT", 10)
+    HDA_STREAM("OUT", 11)
+    HDA_STREAM("OUT", 12)
+    HDA_STREAM("OUT", 13)
+    HDA_STREAM("OUT", 14)
+    HDA_STREAM("OUT", 15)
 
+
+    /* capabilities */
+    [ ICH6_REG_ALLCH ] = {
+        .name     = "ALLCH",
+        .size     = 2,
+        .reset    = (ICH6_PP_CAP_ID << ICH6_CAP_SHIFT) | ICH6_GTS_CAP_BASE,
+    },
+
+    /* PP regs */
+    [ ICH6_REG_PP_CTL ] = {
+        .name     = "PPCTL",
+        .size     = 4,
+        .offset   = offsetof(IntelHDAState, ppctl),
+    },
+    [ ICH6_REG_PP_STS ] = {
+        .name     = "PPSTS",
+        .size     = 4,
+        .offset   = offsetof(IntelHDAState, ppsts),
+    },
+
+    /* GTS caps */
+    [ ICH6_GTS_CAP_BASE ] = {
+        .name     = "GTSCH",
+        .size     = 4,
+        .reset    = (0x1 << ICH6_CAP_SHIFT) | ICH6_DRSM_CAP_BASE,
+    },
+
+    /* DRSM caps */
+    [ ICH6_DRSM_CAP_BASE ] = {
+        .name     = "DRSMCH",
+        .size     = 4,
+        .reset    = (0x5 << ICH6_CAP_SHIFT) | ICH6_SPIB_CAP_BASE,
+    },
+
+    /* SPIB caps */
+    [ ICH6_SPIB_CAP_BASE ] = {
+        .name     = "SBPFCH",
+        .size     = 4,
+        .reset    = (0x4 << ICH6_CAP_SHIFT),
+    },
+
+    [ ICH6_REG_SPBFCCTL ] = {
+        .name     = "SBPFCCTL",
+        .size     = 4,
+        .wmask    = 0xffffffff,
+        .offset   = offsetof(IntelHDAState, sbpfcctl),
+    },
+
+    [ 0x1030 ] = {
+            .name     = "EM2",
+            .size     = 4,
+            .wmask    = 0xffffffff,
+            .offset   = offsetof(IntelHDAState, em2),
+        },
+
+#define SPIB_STREAM(_t, _i)                                            \
+    [ SD_REG(_i, ICH6_REG_SPIB_CTL) ] = {                               \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " SPIB",                          \
+        .size     = 4,                                                \
+        .wmask    = 0xffffffff,                                       \
+        .offset   = offsetof(IntelHDAState, sd[_i].spib),              \
+    },                                                                \
+    [ SD_REG(_i, ICH6_REG_SPIB_CTL) + 4] = {                            \
+        .stream   = _i,                                               \
+        .name     = _t stringify(_i) " MAXFIFO(stnr)",                    \
+        .size     = 4,                                                \
+        .offset   = offsetof(IntelHDAState, sd[_i].maxfifos),         \
+    }
+
+    SPIB_STREAM("IN", 0),
+    SPIB_STREAM("IN", 1),
+    SPIB_STREAM("IN", 2),
+    SPIB_STREAM("IN", 3),
+    SPIB_STREAM("IN", 4),
+    SPIB_STREAM("IN", 5),
+    SPIB_STREAM("IN", 6),
+    SPIB_STREAM("IN", 7),
+
+    SPIB_STREAM("OUT", 8),
+    SPIB_STREAM("OUT", 9),
+    SPIB_STREAM("OUT", 10),
+    SPIB_STREAM("OUT", 11),
+    SPIB_STREAM("OUT", 12),
+    SPIB_STREAM("OUT", 13),
+    SPIB_STREAM("OUT", 14),
+    SPIB_STREAM("OUT", 15),
 };
 
 static const IntelHDAReg *intel_hda_reg_find(IntelHDAState *d, hwaddr addr)
@@ -803,16 +913,18 @@ static const IntelHDAReg *intel_hda_reg_find(IntelHDAState *d, hwaddr addr)
     if (addr >= ARRAY_SIZE(regtab)) {
         goto noreg;
     }
-    reg = regtab+addr;
+    reg = regtab + addr;
     if (reg->name == NULL) {
         goto noreg;
     }
     return reg;
 
 noreg:
-    dprint(d, 1, "unknown register, addr 0x%x\n", (int) addr);
+    dprint(d, 1, "unknown HDA register, addr 0x%x\n", (int) addr);
     return NULL;
 }
+
+
 
 static uint32_t *intel_hda_reg_addr(IntelHDAState *d, const IntelHDAReg *reg)
 {
@@ -1108,7 +1220,7 @@ static const VMStateDescription vmstate_intel_hda = {
         VMSTATE_UINT32(icw, IntelHDAState),
         VMSTATE_UINT32(irr, IntelHDAState),
         VMSTATE_UINT32(ics, IntelHDAState),
-        VMSTATE_STRUCT_ARRAY(st, IntelHDAState, 8, 0,
+        VMSTATE_STRUCT_ARRAY(st, IntelHDAState, 16, 0,
                              vmstate_intel_hda_stream,
                              IntelHDAStream),
 
