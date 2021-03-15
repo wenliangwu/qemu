@@ -20,11 +20,11 @@
 #include "qemu/osdep.h"
 #include "hw/pci/pci.h"
 #include "hw/qdev-properties.h"
-#include "intel-hda.h"
 #include "migration/vmstate.h"
 #include "qemu/module.h"
-#include "intel-hda-defs.h"
 #include "audio/audio.h"
+#include "hw/audio/intel-hda-defs.h"
+#include "hw/audio/intel-hda.h"
 #include "trace.h"
 #include "qom/object.h"
 

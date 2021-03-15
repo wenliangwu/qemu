@@ -27,9 +27,9 @@
 #include "qemu/module.h"
 #include "qemu/error-report.h"
 #include "hw/audio/soundhw.h"
-#include "intel-hda.h"
+#include "hw/audio/intel-hda-defs.h"
 #include "migration/vmstate.h"
-#include "intel-hda-defs.h"
+#include "hw/audio/intel-hda.h"
 #include "sysemu/dma.h"
 #include "qapi/error.h"
 #include "qom/object.h"
@@ -117,110 +117,10 @@ bool hda_codec_xfer(HDACodecDevice *dev, uint32_t stnr, bool output,
 /* --------------------------------------------------------------------- */
 /* intel hda emulation                                                   */
 
-typedef struct IntelHDAStream IntelHDAStream;
-typedef struct IntelHDAState IntelHDAState;
-typedef struct IntelHDAReg IntelHDAReg;
-
-typedef struct bpl {
-    uint64_t addr;
-    uint32_t len;
-    uint32_t flags;
-} bpl;
-
-struct IntelHDAStream {
-    /* registers */
-    uint32_t ctl;
-    uint32_t lpib;
-    uint32_t cbl;
-    uint32_t lvi;
-    uint32_t fmt;
-    uint32_t bdlp_lbase;
-    uint32_t bdlp_ubase;
-
-    /* state */
-    bpl      *bpl;
-    uint32_t bentries;
-    uint32_t bsize, be, bp;
-};
-
-struct IntelHDAState {
-    PCIDevice pci;
-    const char *name;
-    HDACodecBus codecs;
-
-    /* registers */
-    uint32_t g_ctl;
-    uint32_t wake_en;
-    uint32_t state_sts;
-    uint32_t int_ctl;
-    uint32_t int_sts;
-    uint32_t wall_clk;
-
-    uint32_t corb_lbase;
-    uint32_t corb_ubase;
-    uint32_t corb_rp;
-    uint32_t corb_wp;
-    uint32_t corb_ctl;
-    uint32_t corb_sts;
-    uint32_t corb_size;
-
-    uint32_t rirb_lbase;
-    uint32_t rirb_ubase;
-    uint32_t rirb_wp;
-    uint32_t rirb_cnt;
-    uint32_t rirb_ctl;
-    uint32_t rirb_sts;
-    uint32_t rirb_size;
-
-    uint32_t dp_lbase;
-    uint32_t dp_ubase;
-
-    uint32_t icw;
-    uint32_t irr;
-    uint32_t ics;
-
-    /* streams */
-    IntelHDAStream st[8];
-
-    /* state */
-    MemoryRegion container;
-    MemoryRegion mmio;
-    MemoryRegion alias;
-    uint32_t rirb_count;
-    int64_t wall_base_ns;
-
-    /* debug logging */
-    const IntelHDAReg *last_reg;
-    uint32_t last_val;
-    uint32_t last_write;
-    uint32_t last_sec;
-    uint32_t repeat_count;
-
-    /* properties */
-    uint32_t debug;
-    OnOffAuto msi;
-    bool old_msi_addr;
-};
-
 #define TYPE_INTEL_HDA_GENERIC "intel-hda-generic"
 
 DECLARE_INSTANCE_CHECKER(IntelHDAState, INTEL_HDA,
-                         TYPE_INTEL_HDA_GENERIC)
-
-struct IntelHDAReg {
-    const char *name;      /* register name */
-    uint32_t   size;       /* size in bytes */
-    uint32_t   reset;      /* reset value */
-    uint32_t   wmask;      /* write mask */
-    uint32_t   wclear;     /* write 1 to clear bits */
-    uint32_t   offset;     /* location in IntelHDAState */
-    uint32_t   shift;      /* byte access entries for dwords */
-    uint32_t   stream;
-    void       (*whandler)(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old);
-    void       (*rhandler)(IntelHDAState *d, const IntelHDAReg *reg);
-};
-
-static void intel_hda_reset(DeviceState *dev);
+                         TYPE_INTEL_HDA_GENERIC);
 
 /* --------------------------------------------------------------------- */
 
@@ -343,7 +243,7 @@ static void intel_hda_corb_run(IntelHDAState *d)
     }
 }
 
-static void intel_hda_response(HDACodecDevice *dev, bool solicited, uint32_t response)
+void intel_hda_response(HDACodecDevice *dev, bool solicited, uint32_t response)
 {
     HDACodecBus *bus = HDA_BUS(dev->qdev.parent_bus);
     IntelHDAState *d = container_of(bus, IntelHDAState, codecs);
@@ -391,7 +291,7 @@ static void intel_hda_response(HDACodecDevice *dev, bool solicited, uint32_t res
     }
 }
 
-static bool intel_hda_xfer(HDACodecDevice *dev, uint32_t stnr, bool output,
+bool intel_hda_xfer(HDACodecDevice *dev, uint32_t stnr, bool output,
                            uint8_t *buf, uint32_t len)
 {
     HDACodecBus *bus = HDA_BUS(dev->qdev.parent_bus);
@@ -505,29 +405,29 @@ static void intel_hda_notify_codecs(IntelHDAState *d, uint32_t stream, bool runn
 
 /* --------------------------------------------------------------------- */
 
-static void intel_hda_set_g_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_g_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     if ((d->g_ctl & ICH6_GCTL_RESET) == 0) {
         intel_hda_reset(DEVICE(d));
     }
 }
 
-static void intel_hda_set_wake_en(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_wake_en(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_update_irq(d);
 }
 
-static void intel_hda_set_state_sts(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_state_sts(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_update_irq(d);
 }
 
-static void intel_hda_set_int_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_int_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_update_irq(d);
 }
 
-static void intel_hda_get_wall_clk(IntelHDAState *d, const IntelHDAReg *reg)
+void intel_hda_get_wall_clk(IntelHDAState *d, const IntelHDAReg *reg)
 {
     int64_t ns;
 
@@ -535,24 +435,26 @@ static void intel_hda_get_wall_clk(IntelHDAState *d, const IntelHDAReg *reg)
     d->wall_clk = (uint32_t)(ns * 24 / 1000);  /* 24 MHz */
 }
 
-static void intel_hda_set_corb_wp(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+
+
+void intel_hda_set_corb_wp(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_corb_run(d);
 }
 
-static void intel_hda_set_corb_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_corb_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_corb_run(d);
 }
 
-static void intel_hda_set_rirb_wp(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_rirb_wp(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     if (d->rirb_wp & ICH6_RIRBWP_RST) {
         d->rirb_wp = 0;
     }
 }
 
-static void intel_hda_set_rirb_sts(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_rirb_sts(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     intel_hda_update_irq(d);
 
@@ -563,14 +465,14 @@ static void intel_hda_set_rirb_sts(IntelHDAState *d, const IntelHDAReg *reg, uin
     }
 }
 
-static void intel_hda_set_ics(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_ics(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     if (d->ics & ICH6_IRS_BUSY) {
         intel_hda_corb_run(d);
     }
 }
 
-static void intel_hda_set_st_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
+void intel_hda_set_st_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint32_t old)
 {
     bool output = reg->stream >= 4;
     IntelHDAStream *st = d->st + reg->stream;
@@ -578,7 +480,12 @@ static void intel_hda_set_st_ctl(IntelHDAState *d, const IntelHDAReg *reg, uint3
     if (st->ctl & 0x01) {
         /* reset */
         dprint(d, 1, "st #%d: reset\n", reg->stream);
-        st->ctl = SD_STS_FIFO_READY << 24;
+
+        /* codeloader holds it current state */
+        if (st->is_codeloader)
+            st->ctl |= SD_STS_FIFO_READY << 24;
+        else
+            st->ctl = SD_STS_FIFO_READY << 24;
     }
     if ((st->ctl & 0x02) != (old & 0x02)) {
         uint32_t stnr = (st->ctl >> 20) & 0x0f;
@@ -1066,7 +973,7 @@ static const MemoryRegionOps intel_hda_mmio_ops = {
 
 /* --------------------------------------------------------------------- */
 
-static void intel_hda_reset(DeviceState *dev)
+void intel_hda_reset(DeviceState *dev)
 {
     BusChild *kid;
     IntelHDAState *d = INTEL_HDA(dev);
@@ -1131,14 +1038,14 @@ static void intel_hda_realize(PCIDevice *pci, Error **errp)
                        intel_hda_response, intel_hda_xfer);
 }
 
-static void intel_hda_exit(PCIDevice *pci)
+void intel_hda_exit(PCIDevice *pci)
 {
     IntelHDAState *d = INTEL_HDA(pci);
 
     msi_uninit(&d->pci);
 }
 
-static int intel_hda_post_load(void *opaque, int version)
+int intel_hda_post_load(void *opaque, int version)
 {
     IntelHDAState* d = opaque;
     int i;
