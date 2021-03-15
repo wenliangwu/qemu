@@ -61,6 +61,7 @@
 #include "hw/pci/pci_bus.h"
 #include "hw/pci-host/q35.h"
 #include "hw/i386/x86-iommu.h"
+#include "hw/dma/dw-dma.h"
 
 #include "hw/acpi/aml-build.h"
 #include "hw/acpi/utils.h"
@@ -69,6 +70,8 @@
 #include "qom/qom-qobject.h"
 #include "hw/i386/amd_iommu.h"
 #include "hw/i386/intel_iommu.h"
+#include "hw/adsp/hw.h"
+#include "hw/audio/adsp-host.h"
 
 #include "hw/acpi/ipmi.h"
 #include "hw/acpi/hmat.h"
@@ -1727,7 +1730,12 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
                    TPM_TIS_ADDR_SIZE, AML_READ_WRITE));
     }
     aml_append(scope, aml_name_decl("_CRS", crs));
-
+#if 0
+    build_acpi_byt_adsp_devices(dsdt);
+    build_acpi_hsw_adsp_devices(dsdt);
+    build_acpi_cavs_devices(dsdt);
+    build_acpi_dwdma_device(dsdt);
+#endif
     /* reserve GPE0 block resources */
     dev = aml_device("GPE0");
     aml_append(dev, aml_name_decl("_HID", aml_string("PNP0A06")));
