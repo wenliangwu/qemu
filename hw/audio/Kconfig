@@ -63,3 +63,5 @@ config ADSP_INTEL_HOST_BYT
 config ADSP_INTEL_HOST_HSW
     bool
 
+config ADSP_INTEL_HOST_CAVS
+    bool

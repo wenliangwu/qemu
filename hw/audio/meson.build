@@ -15,5 +15,7 @@ softmmu_ss.add(when: 'CONFIG_WM8750', if_true: files('wm8750.c'))
 softmmu_ss.add(when: 'CONFIG_ADSP', if_true: files('adsp_common.c'))
 softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST', if_true: files(
     'adsp_host_dma.c',
-    'adsp_acpi.c'))    'adsp_acpi.c'))
-softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST_BYT', if_true: files('adsp_byt.c'))softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST_HSW', if_true: files('adsp_hsw.c'))
+    'adsp_acpi.c'))
+softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST_BYT', if_true: files('adsp_byt.c'))
+softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST_HSW', if_true: files('adsp_hsw.c'))
+softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST_CAVS', if_true: files('adsp_cavs.c'))
