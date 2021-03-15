@@ -12,3 +12,8 @@ softmmu_ss.add(when: 'CONFIG_PCSPK', if_true: files('pcspk.c'))
 softmmu_ss.add(when: 'CONFIG_PL041', if_true: files('pl041.c', 'lm4549.c'))
 softmmu_ss.add(when: 'CONFIG_SB16', if_true: files('sb16.c'))
 softmmu_ss.add(when: 'CONFIG_WM8750', if_true: files('wm8750.c'))
+softmmu_ss.add(when: 'CONFIG_ADSP', if_true: files('adsp_common.c'))
+softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST', if_true: files(
+    'adsp_host_dma.c',
+    'adsp_acpi.c'))    'adsp_acpi.c'))
+softmmu_ss.add(when: 'CONFIG_ADSP_INTEL_HOST_BYT', if_true: files('adsp_byt.c'))

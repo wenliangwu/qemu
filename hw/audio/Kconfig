@@ -50,3 +50,13 @@ config CS4231
 
 config MARVELL_88W8618
     bool
+
+config ADSP
+    bool
+
+config ADSP_INTEL_HOST
+    bool
+
+config ADSP_INTEL_HOST_BYT
+    bool
+

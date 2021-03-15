@@ -23,3 +23,18 @@ hda_audio_running(const char *stream, int nr, bool running) "st %s, nr %d, run %
 hda_audio_format(const char *stream, int chan, const char *fmt, int freq) "st %s, %d x %s @ %d Hz"
 hda_audio_adjust(const char *stream, int pos) "st %s, pos %d"
 hda_audio_overrun(const char *stream) "st %s"
+
+# adsp_byt.c adsp_hsw.c adsp_cavs.c
+adsp_host_mbox_read(uint32_t addr, uint32_t value) "mbox: R 0x%08x value 0x%8x"
+adsp_host_mbox_write(uint32_t addr, uint32_t value) "mbox: W 0x%08x value 0x%8x"
+adsp_host_shim_read(uint32_t addr, uint32_t value) "shim: R 0x%08x value 0x%8x"
+adsp_host_shim_write(uint32_t addr, uint32_t value) "shim: W 0x%08x value 0x%8x"
+adsp_host_pci_read(uint32_t addr, uint32_t value) "shim: R 0x%08x value 0x%8x"
+adsp_host_pci_write(uint32_t addr, uint32_t value) "shim: W 0x%08x value 0x%8x"
+adsp_host_shim_mask(const char *name, uint32_t masking, uint32_t mask, uint32_t active) "mask: %s masking 0x%08x mask 0x%8x active 0x%8x"
+adsp_host_shim_event(const char *event, uint32_t value) "%s: 0x%8x"
+adsp_host_dsp_event(const char *event) "host action %s"
+adsp_host_dsp_msg(const char *event, uint32_t msg) "host %s %d"
+adsp_host_dsp_irq(const char *name, uint32_t masking, uint32_t mask, uint32_t active, uint32_t cmd) "mask: %s masking 0x%08x mask 0x%8x active 0x%8x cmd 0x%8x"
+adsp_host_shim_irq(const char *event) "%s"
+adsp_host_shim_timer(const char *event, uint32_t value) "%s time 0x%8x"
