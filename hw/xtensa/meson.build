@@ -12,4 +12,10 @@ xtensa_ss.add(when: 'CONFIG_ADSP', if_true: files('adsp-common.c'))
 xtensa_ss.add(when: 'CONFIG_XTENSA_INTEL_ADSP_BYT', if_true: files('byt.c'))
 xtensa_ss.add(when: 'CONFIG_XTENSA_INTEL_ADSP_HSW', if_true: files('hsw.c'))
 xtensa_ss.add(when: 'CONFIG_XTENSA_INTEL_ADSP_CAVS', if_true: files('cavs.c'))
+xtensa_ss.add(when: 'CONFIG_XTENSA_NXP_ADSP', if_true: files('irqstr.c'))
+xtensa_ss.add(when: 'CONFIG_XTENSA_NXP_ADSP_IMX8', if_true: files(
+   'imx8-mu.c',
+   'imx8.c'))
+xtensa_ss.add(when: 'CONFIG_XTENSA_NXP_ADSP_IMX8M', if_true: files('imx8m.c'))
+
 hw_arch += {'xtensa': xtensa_ss}

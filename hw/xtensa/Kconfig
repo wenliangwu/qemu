@@ -24,3 +24,13 @@ config XTENSA_INTEL_ADSP_HSW
 
 config XTENSA_INTEL_ADSP_CAVS
     bool
+
+config XTENSA_NXP_ADSP
+    bool
+
+config XTENSA_NXP_ADSP_IMX8
+    bool
+
+config XTENSA_NXP_ADSP_IMX8M
+    bool
+    
