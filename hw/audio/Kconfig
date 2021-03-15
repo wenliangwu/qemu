@@ -60,3 +60,6 @@ config ADSP_INTEL_HOST
 config ADSP_INTEL_HOST_BYT
     bool
 
+config ADSP_INTEL_HOST_HSW
+    bool
+
