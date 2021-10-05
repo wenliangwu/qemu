@@ -167,6 +167,13 @@ const struct adsp_reg_desc adsp_imx8_mu_map[] = {
     {.name = "cr", .enable = LOG_MU_CR, .offset = 0x24},
 };
 
+const struct adsp_reg_desc adsp_mt8195_mb_map[] = {
+    {.name = "in", .enable = LOG_MB_IN, .offset = 0x0},
+    {.name = "in_clr", .enable = LOG_MB_IN_CLR, .offset = 0x4},
+    {.name = "out", .enable = LOG_MB_OUT, .offset = 0x1C},
+    {.name = "out_clr", .enable = LOG_MB_OUT_CLR, .offset = 0x20},
+};
+
 struct adsp_log *log_init(const char *log_name, const char *args)
 {
     struct adsp_log *log;

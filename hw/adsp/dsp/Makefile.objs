@@ -11,3 +11,5 @@ obj-y += hikey.o
 obj-y += common.o
 obj-y += imx8.o
 obj-y += imx8m.o
+obj-y += mt8195.o
+obj-y += mt8195-mb.o

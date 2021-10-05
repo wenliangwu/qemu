@@ -132,6 +132,16 @@
 #define LOG_SAI 1
 #define LOG_ESAI 1
 
+/* mb debug options - LOG_MB must be 1 to enable other options */
+#define LOG_MB             1
+#define LOG_MB_IN          1
+#define LOG_MB_IN_CLR      1
+#define LOG_MB_OUT         1
+#define LOG_MB_OUT_CLR     1
+
+/* DSP CFG Logging*/
+#define LOG_DSPCFG 1
+
 struct adsp_log {
 	GMutex mutex;
 	FILE *file;
@@ -152,6 +162,9 @@ extern const struct adsp_reg_desc adsp_sue_shim_map[SUE_SHIM_REGS];
 extern const struct adsp_reg_desc adsp_cnl_shim_map[CNL_SHIM_REGS];
 #define IMX8_MU_REGS    10
 extern const struct adsp_reg_desc adsp_imx8_mu_map[IMX8_MU_REGS];
+#define MT8195_MB_REGS    4
+extern const struct adsp_reg_desc adsp_mt8195_mb_map[MT8195_MB_REGS];
+
 
 
 #if LOG_SHIM

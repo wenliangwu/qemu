@@ -25,3 +25,4 @@ obj-y += gdbstub.o
 obj-$(CONFIG_SOFTMMU) += mmu_helper.o
 obj-y += win_helper.o
 obj-y += core-imx8m.o
+obj-y += core-mt8195.o
